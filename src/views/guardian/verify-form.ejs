@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guardian Verification - PhotoOp</title>
+  <style>
+    :root { --primary: #E53935; --primary-dark: #B71C1C; --text: #333333; --muted: #666666; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f5f5f5;
+      color: var(--text);
+      margin: 0;
+      padding: 24px 12px;
+    }
+    .card {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .header {
+      background-color: var(--primary);
+      background-image: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, #FF7A6E 100%);
+      text-align: center;
+      padding: 32px 24px;
+    }
+    .header h1 { color: #ffffff; margin: 0; font-size: 22px; letter-spacing: 0.3px; }
+    .body { padding: 24px; }
+    h3 { margin: 24px 0 8px; font-size: 16px; color: #1a1a1a; }
+    h3:first-child { margin-top: 0; }
+    p { line-height: 1.5; }
+    ul { padding-left: 20px; line-height: 1.6; }
+    .info-box {
+      background: #fafafa;
+      border: 1px solid #eeeeee;
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-weight: bold; font-size: 14px; margin-bottom: 6px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    input[type="text"], input[type="tel"], input[type="file"], textarea, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cccccc;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    .required::after { content: " *"; color: var(--primary); }
+    .error-banner {
+      background: #FDECEA;
+      border: 1px solid var(--primary);
+      color: var(--primary-dark);
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    button {
+      flex: 1;
+      min-width: 160px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 6px;
+      border: 2px solid var(--primary);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-approve { background: var(--primary); color: #ffffff; }
+    .btn-decline { background: #ffffff; color: var(--primary); }
+    .footer {
+      padding: 16px 24px;
+      background: #fafafa;
+      text-align: center;
+      font-size: 12px;
+      color: #999999;
+      border-top: 1px solid #eeeeee;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>Guardian Consent Required</h1>
+    </div>
+
+    <div class="body">
+      <% if (error) { %>
+        <div class="error-banner"><%= error %></div>
+      <% } %>
+
+      <p>Dear Parent or Legal Guardian,</p>
+      <p>Your child has requested to create a PhotoOp Snapper account. Because your child is under
+      the age of 18, your identity verification and consent are required before their account can
+      be activated.</p>
+
+      <h3>Minor Information</h3>
+      <div class="info-box">
+        Child's Full Name: <strong><%= child.fullName || 'N/A' %></strong><br />
+        Child's Email Address: <strong><%= child.email %></strong><br />
+        Date of Birth:
+        <strong><%= child.dateOfBirth ? new Date(child.dateOfBirth).toLocaleDateString() : 'N/A' %></strong>
+      </div>
+      <p class="hint">Please verify that the information above is correct. If any information is
+      inaccurate or you did not authorize this registration, use the Decline Account button below.</p>
+
+      <form method="POST" action="/guardian/verify" enctype="multipart/form-data">
+        <input type="hidden" name="token" value="<%= token %>" />
+
+        <h3>Step 1: Verify Your Identity</h3>
+        <p class="hint">Upload a valid government-issued photo ID (driver's license, state ID,
+        passport, or other accepted government-issued identification).</p>
+        <div class="field">
+          <label class="required" for="idImage">Government-issued ID</label>
+          <input type="file" id="idImage" name="idImage" accept="image/*,.pdf" required />
+        </div>
+
+        <h3>Step 2: Parent or Guardian Information</h3>
+        <div class="field">
+          <label class="required" for="guardianName">Parent or Legal Guardian Full Name</label>
+          <input type="text" id="guardianName" name="guardianName" required />
+        </div>
+        <div class="field">
+          <label class="required" for="relation">Relationship to Child</label>
+          <input type="text" id="relation" name="relation" placeholder="e.g. Mother, Father, Legal Guardian" required />
+        </div>
+        <div class="field">
+          <label class="required" for="phoneNumber">Parent or Guardian Phone Number</label>
+          <input type="tel" id="phoneNumber" name="phoneNumber" required />
+        </div>
+        <div class="field">
+          <label for="emergencyContactName">Emergency Contact Name</label>
+          <input type="text" id="emergencyContactName" name="emergencyContactName" />
+        </div>
+        <div class="field">
+          <label for="emergencyContactPhone">Emergency Contact Phone Number</label>
+          <input type="tel" id="emergencyContactPhone" name="emergencyContactPhone" />
+        </div>
+
+        <h3>Consent</h3>
+        <p>By selecting <strong>Approve Account</strong>, you certify and acknowledge that:</p>
+        <ul>
+          <li>You are at least 18 years of age and are the parent or legal guardian of the minor
+          identified above.</li>
+          <li>The information and identification you submitted are accurate.</li>
+          <li>You authorize your child to create and maintain a PhotoOp Snapper account.</li>
+          <li>You have reviewed and agree to PhotoOp's Terms of Service, Privacy Policy, and Minor
+          Safety Policy.</li>
+          <li>You consent to the collection and processing of your child's information as
+          described in those policies.</li>
+          <li>You understand your child may accept photography sessions through PhotoOp but is
+          never required to accept any booking.</li>
+          <li>You are responsible for supervising your child's participation, approving
+          photography sessions, and determining whether adult supervision or accompaniment is
+          appropriate.</li>
+          <li>You understand that you may withdraw your consent at any time by contacting PhotoOp
+          Support.</li>
+        </ul>
+
+        <div class="field">
+          <label for="reason">Reason for declining (optional)</label>
+          <textarea id="reason" name="reason" maxlength="500" placeholder="Only needed if you're declining this request"></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-approve" name="decision" value="approved">Approve Account</button>
+          <button type="submit" class="btn-decline" name="decision" value="rejected" formnovalidate>Decline Account</button>
+        </div>
+
+        <p class="hint" style="margin-top:16px;">If identity verification and parental consent are
+        not completed, your child's account request will be canceled and no PhotoOp Snapper
+        account will be activated. This link expires 24 hours after it was sent.</p>
+      </form>
+    </div>
+
+    <div class="footer">
+      &copy; <%= new Date().getFullYear() %> PhotoOp. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>

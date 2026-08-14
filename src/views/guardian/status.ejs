@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> - PhotoOp</title>
+  <style>
+    :root { --primary: #E53935; --primary-dark: #B71C1C; --text: #333333; --muted: #666666; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f5f5f5;
+      color: var(--text);
+      margin: 0;
+      padding: 24px 12px;
+    }
+    .card {
+      max-width: 520px;
+      margin: 60px auto;
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+      text-align: center;
+    }
+    .header {
+      padding: 40px 24px 24px;
+    }
+    .icon {
+      width: 64px;
+      height: 64px;
+      line-height: 64px;
+      border-radius: 50%;
+      font-size: 32px;
+      margin: 0 auto 16px;
+      color: #ffffff;
+    }
+    .icon.success { background: #2e7d32; }
+    .icon.already-verified { background: #1565c0; }
+    .icon.expired { background: #ef6c00; }
+    .icon.failed { background: var(--primary); }
+    h1 { margin: 0 0 12px; font-size: 22px; color: #1a1a1a; }
+    p { line-height: 1.5; color: var(--muted); padding: 0 24px; }
+    .footer {
+      padding: 20px 24px;
+      background: #fafafa;
+      text-align: center;
+      font-size: 12px;
+      color: #999999;
+      border-top: 1px solid #eeeeee;
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="icon <%= statusType %>">
+        <% if (statusType === 'success') { %>&check;<% } %>
+        <% if (statusType === 'already-verified') { %>&#8505;<% } %>
+        <% if (statusType === 'expired') { %>&#9888;<% } %>
+        <% if (statusType === 'failed') { %>&times;<% } %>
+      </div>
+      <h1><%= title %></h1>
+    </div>
+    <p><%= message %></p>
+    <div class="footer">
+      &copy; <%= new Date().getFullYear() %> PhotoOp. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>
