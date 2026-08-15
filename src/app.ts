@@ -15,6 +15,7 @@ import { guardianRoutes } from './app/modules/guardian/guardian.route';
 import { paymentRoutes } from './app/modules/payment/payment.route';
 import { logHttpRequests } from './app/utils/logger';
 const app: Application = express();
+
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 
@@ -27,7 +28,7 @@ app.use(logHttpRequests);
 
 // Stripe webhook needs the raw, unparsed request body to verify its signature, so it
 // must be mounted BEFORE express.json() below strips that away — see payment.route.ts
-app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/payment', paymentRoutes);
 
 //parsers
 app.use(express.json());

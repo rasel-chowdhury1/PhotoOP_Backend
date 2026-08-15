@@ -19,7 +19,7 @@ export enum BookingStatus {
 // assertTransition()/TRANSITION_ROLES in booking.service.ts
 export const ALLOWED_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   [BookingStatus.PENDING]: [BookingStatus.ACCEPTED, BookingStatus.REJECTED, BookingStatus.CANCELLED],
-  [BookingStatus.ACCEPTED]: [BookingStatus.UPCOMING, BookingStatus.CANCELLED],
+  [BookingStatus.ACCEPTED]: [BookingStatus.UPCOMING, BookingStatus.SHOOT_COMPLETED, BookingStatus.CANCELLED],
   [BookingStatus.UPCOMING]: [BookingStatus.SHOOT_COMPLETED, BookingStatus.CANCELLED],
   [BookingStatus.SHOOT_COMPLETED]: [BookingStatus.DELIVERY_PENDING],
   // DISPUTED is reachable directly from DELIVERY_PENDING: rejectDelivery() decides the

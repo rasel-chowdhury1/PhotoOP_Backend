@@ -1,34 +1,6 @@
 import { Schema, model } from "mongoose";
 import { DeliveryStatus, RejectionCategory, DELIVERY_METHODS } from "./booking.interface";
-import { DeliveryAssetType, IDelivery } from "./delivery.interface";
-
-// a delivery can hold 300+ assets — kept as its own collection rather than embedded on
-// Booking so the booking document itself stays small and fast to read
-const DeliveryAssetSchema = new Schema(
-  {
-    url: {
-      type: String,
-      required: true,
-    },
-    key: {
-      type: String,
-    },
-    type: {
-      type: String,
-      enum: Object.values(DeliveryAssetType),
-      default: DeliveryAssetType.IMAGE,
-    },
-    size: {
-      type: Number,
-    },
-    thumbnailUrl: {
-      type: String,
-    },
-  },
-  {
-    _id: false,
-  }
-);
+import { IDelivery } from "./delivery.interface";
 
 const DeliverySchema = new Schema<IDelivery>(
   {
@@ -77,10 +49,12 @@ const DeliverySchema = new Schema<IDelivery>(
       type: Date,
     },
 
-    // IN_APP_GALLERY only
-    assets: {
-      type: [DeliveryAssetSchema],
-      default: [],
+    // IN_APP_GALLERY only — reference, not the pictures themselves (those live on
+    // the Gallery doc; see gallery.model.ts)
+    galleryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Gallery",
+      default: null,
     },
 
     coverImage: {

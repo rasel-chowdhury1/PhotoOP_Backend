@@ -1,10 +1,8 @@
-import mongoose, { Schema, model } from "mongoose";
+import { Schema, model } from "mongoose";
+import { DeliveryAssetType } from "../booking/delivery.interface";
+import { GalleryStatus, IGallery } from "./gallery.interface";
 
-export enum GalleryStatus {
-  DRAFT = "DRAFT",
-  DELIVERED = "DELIVERED",
-  ARCHIVED = "ARCHIVED",
-}
+export { GalleryStatus };
 
 const GalleryImageSchema = new Schema(
   {
@@ -12,6 +10,19 @@ const GalleryImageSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+    },
+
+    // internal path / storage key — required so uploaded assets can be located and
+    // deleted later (see deleteGalleryAssets in booking.service.ts)
+    key: {
+      type: String,
+      required: true,
+    },
+
+    type: {
+      type: String,
+      enum: Object.values(DeliveryAssetType),
+      default: DeliveryAssetType.IMAGE,
     },
 
     size: {
@@ -28,7 +39,7 @@ const GalleryImageSchema = new Schema(
   { _id: false }
 );
 
-const GallerySchema = new Schema(
+const GallerySchema = new Schema<IGallery>(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -44,11 +55,21 @@ const GallerySchema = new Schema(
       index: true,
     },
 
+    // one gallery per booking, reused/appended-to across delivery attempts —
+    // rejections don't create a new gallery, they just flip status back to DRAFT
     bookingId: {
       type: Schema.Types.ObjectId,
       ref: "Booking",
       required: true,
       unique: true,
+    },
+
+        // Defaults to the customer's name at booking-accept time (see gallery creation
+    // in booking.service.ts). Editable later, so it can diverge from Booking.fullName.
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
 
     pictures: {
@@ -73,7 +94,6 @@ const GallerySchema = new Schema(
       enum: Object.values(GalleryStatus),
       default: GalleryStatus.DRAFT,
     },
-    
   },
   {
     timestamps: true,
@@ -81,4 +101,4 @@ const GallerySchema = new Schema(
   }
 );
 
-export default model("Gallery", GallerySchema);
+export default model<IGallery>("Gallery", GallerySchema);

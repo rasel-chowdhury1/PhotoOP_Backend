@@ -1,4 +1,5 @@
 import httpStatus from "http-status";
+import { format } from "date-fns";
 import mongoose, { Types } from "mongoose";
 import path from "path";
 import AppError from "../../error/AppError";
@@ -11,6 +12,10 @@ import Package from "../package/package.model";
 import { DurationUnit } from "../package/package.interface";
 import { User } from "../user/user.model";
 import { AdminApprovalStatus, UserRole, UserStatus } from "../user/user.interface";
+import SnapperProfile from "../snapperProfile/snapperProfile.model";
+import Gallery from "../gallery/gallery.model";
+import { GalleryStatus, IGalleryPicture } from "../gallery/gallery.interface";
+import { bytesToGB } from "../../utils/storage/units";
 import { getOrCreateAvailability, isOverlapping, toMinutes } from "../availability/availability.service";
 import { TDayAvailability, TWeekDay } from "../availability/availability.interface";
 import Notification from "../notifications/notifications.model";
@@ -24,8 +29,13 @@ import {
   DeliveryStatus,
   ICreateBookingPayload,
   ISelectedAddOn,
+  PaymentStatus,
 } from "./booking.interface";
-import { IRejectDeliveryPayload, ISubmitDeliveryPayload } from "./delivery.interface";
+import {
+  DeliveryAssetType,
+  IRejectDeliveryPayload,
+  ISubmitDeliveryPayload,
+} from "./delivery.interface";
 
 // JS Date#getUTCDay(): 0=Sunday..6=Saturday
 const JS_DAY_TO_WEEK_DAY: TWeekDay[] = [
@@ -83,6 +93,15 @@ const notifyBookingParties = (params: {
       console.error("Failed to create booking notification:", error);
     });
   });
+};
+
+// TODO: no refund flow exists yet anywhere in the codebase (no Stripe refund API call
+// is wired up) — this just marks the booking as owing a refund so it's visible/queryable;
+// wire this up to an actual `stripe.refunds.create(...)` call once that integration exists
+const triggerRefund = (booking: InstanceType<typeof Booking>) => {
+  console.log(
+    `[booking.service] TODO: refund owed for booking ${booking.bookingId} (${booking.totalPrice}) — no refund API wired up yet`
+  );
 };
 
 const createBooking = async (payload: ICreateBookingPayload, customerUserId: string) => {
@@ -383,7 +402,31 @@ const updateBookingStatus = async (
     booking.shootCompletedAt = new Date();
   }
 
+  // the customer already paid — rejecting/cancelling owes them a refund. Only the
+  // backend can move paymentStatus, and reaching the actual REFUNDED status still
+  // requires a separate admin-only transition (see TRANSITION_ROLES/ALLOWED_TRANSITIONS)
+  if (
+    (nextStatus === BookingStatus.REJECTED || nextStatus === BookingStatus.CANCELLED) &&
+    booking.paymentStatus === PaymentStatus.PAID
+  ) {
+    booking.paymentStatus = PaymentStatus.REFUND_PENDING;
+    triggerRefund(booking);
+  }
+
   await booking.save();
+
+  if (nextStatus === BookingStatus.ACCEPTED) {
+  const existingGallery = await Gallery.findOne({ bookingId: booking._id });
+  if (!existingGallery) {
+    const pkg = await Package.findById(booking.packageId).select("packageName");
+    await Gallery.create({
+      userId: booking.userId,
+      snapperId: booking.snapperId,
+      bookingId: booking._id,
+      name: `${pkg?.packageName || "Photoshoot"} - ${format(booking.bookingDate, "MMM d, yyyy")}`,
+    });
+  }
+}
 
   const notificationType = NOTIFICATION_TYPE_BY_STATUS[nextStatus];
   if (notificationType) {
@@ -423,6 +466,8 @@ const submitDelivery = async (
     throw new AppError(httpStatus.BAD_REQUEST, "Maximum delivery attempts reached");
   }
 
+  let gallery: InstanceType<typeof Gallery> | null = null;
+
   if (payload.deliveryMethod === DELIVERY_METHODS.EXTERNAL_LINK) {
     if (!payload.externalDeliveryLink) {
       throw new AppError(
@@ -430,11 +475,22 @@ const submitDelivery = async (
         "externalDeliveryLink is required for EXTERNAL_LINK deliveries"
       );
     }
-  } else if (!payload.assets || payload.assets.length === 0) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      "At least one asset is required for in-app gallery deliveries"
-    );
+  } else if (payload.deliveryMethod === DELIVERY_METHODS.IN_APP_GALLERY) {
+    if (!payload.galleryId) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        "galleryId is required for in-app gallery deliveries"
+      );
+    }
+
+    // must belong to THIS booking — prevents referencing an unrelated gallery
+    gallery = await Gallery.findOne({ _id: payload.galleryId, bookingId: booking._id });
+    if (!gallery) {
+      throw new AppError(httpStatus.NOT_FOUND, "Gallery not found for this booking");
+    }
+    if (gallery.pictures.length === 0) {
+      throw new AppError(httpStatus.BAD_REQUEST, "Gallery has no pictures yet");
+    }
   }
 
   const nextAttempt = booking.deliveryAttempts + 1;
@@ -458,7 +514,7 @@ const submitDelivery = async (
                 : undefined,
             linkPassword: payload.linkPassword,
             linkExpiresAt: payload.linkExpiresAt,
-            assets: payload.assets || [],
+            galleryId: gallery?._id,
             coverImage: payload.coverImage,
             description: payload.description,
             submittedBy: snapperUserId,
@@ -469,6 +525,11 @@ const submitDelivery = async (
         { session }
       );
       delivery = createdDelivery;
+
+      if (gallery) {
+        gallery.status = GalleryStatus.DELIVERED;
+        await gallery.save({ session });
+      }
 
       booking.status = BookingStatus.DELIVERY_PENDING;
       booking.currentDeliveryId = delivery._id;
@@ -601,6 +662,15 @@ const rejectDelivery = async (
       delivery.reviewedAt = new Date();
       await delivery.save({ session });
 
+      // let the snapper update/replace pictures before resubmitting
+      if (delivery.galleryId) {
+        await Gallery.updateOne(
+          { _id: delivery.galleryId },
+          { status: GalleryStatus.DRAFT },
+          { session }
+        );
+      }
+
       booking.status = nextStatus;
       booking.autoAcceptAt = null;
       booking.statusHistory.push({
@@ -640,7 +710,11 @@ const getDeliveryHistory = async (bookingId: string, requesterId: string, isAdmi
 
   assertBookingAccess(booking, requesterId, isAdmin);
 
-  return Delivery.find({ bookingId }).sort({ attempt: -1 });
+  // populated, not duplicated: history shows the gallery's current state (it's shared/
+  // mutable across attempts) rather than snapshotting its pictures onto each attempt
+  return Delivery.find({ bookingId })
+    .populate("galleryId", "status totalPictures storageSize")
+    .sort({ attempt: -1 });
 };
 
 // ---------------------------------------------------------------------------
@@ -703,25 +777,139 @@ const resolveDeliveryAssetPath = async (
   return resolvedPath;
 };
 
-// admin tooling only (no route wired up yet) — physically deletes a delivery attempt's
-// files and clears them from the document. Does not touch other attempts: a rejected
-// attempt's files are kept as dispute evidence unless explicitly deleted like this.
-const deleteDeliveryAssets = async (deliveryId: string) => {
-  const delivery = await Delivery.findById(deliveryId);
-  if (!delivery) {
-    throw new AppError(httpStatus.NOT_FOUND, "Delivery not found");
+// admin tooling only (no route wired up yet) — physically deletes a gallery's picture
+// files, clears them from the document, and frees the accounted storage. The gallery
+// document itself is kept (still one-per-booking, per the schema's unique bookingId).
+const deleteGalleryAssets = async (galleryId: string) => {
+  const gallery = await Gallery.findById(galleryId);
+  if (!gallery) {
+    throw new AppError(httpStatus.NOT_FOUND, "Gallery not found");
   }
 
-  const keys = delivery.assets.map((asset) => asset.key).filter((key): key is string => !!key);
+  const keys = gallery.pictures.map((picture) => picture.key).filter(Boolean);
   if (keys.length > 0) {
     await storage.deleteMany(keys);
   }
 
-  delivery.assets = [];
-  delivery.coverImage = undefined;
-  await delivery.save();
+  const freedGB = bytesToGB(gallery.storageSize);
 
-  return delivery;
+  gallery.pictures = [];
+  gallery.totalPictures = 0;
+  gallery.storageSize = 0;
+  await gallery.save();
+
+  await SnapperProfile.updateOne(
+    { userId: gallery.snapperId },
+    { $inc: { storageUsedGB: -freedGB } }
+  );
+
+  return gallery;
+};
+
+const mapMimeTypeToAssetType = (mimeType: string): DeliveryAssetType =>
+  mimeType.startsWith("video/") ? DeliveryAssetType.VIDEO : DeliveryAssetType.IMAGE;
+
+// find-or-create the single gallery for a booking (schema enforces bookingId unique —
+// resubmissions after a rejection reuse the same gallery, they don't get a new one)
+const getOrCreateGalleryForBooking = async (
+  booking: InstanceType<typeof Booking>,
+  session: mongoose.ClientSession
+) => {
+  let gallery = await Gallery.findOne({ bookingId: booking._id }).session(session);
+  if (!gallery) {
+    const [created] = await Gallery.create(
+      [
+        {
+          userId: booking.userId,
+          snapperId: booking.snapperId,
+          bookingId: booking._id,
+          status: GalleryStatus.DRAFT,
+        },
+      ],
+      { session }
+    );
+    gallery = created;
+  }
+  return gallery;
+};
+
+// orchestrates the whole "snapper uploads gallery assets" step: the files are already
+// on disk (multer + resolveDeliveryUploadContext ran first) — this wraps them into
+// UploadedFileResult (recordUploadedDeliveryAssets, unchanged from before), enforces
+// the snapper's storage limit BEFORE committing anything to the DB, and only then
+// find-or-creates the Gallery and bumps storage accounting, all in one transaction
+const uploadDeliveryAssetsToGallery = async (
+  bookingId: string,
+  snapperUserId: string,
+  files: Express.Multer.File[],
+  folder: string
+) => {
+  const booking = await Booking.findOne({ _id: bookingId, isDeleted: false });
+  if (!booking) {
+    throw new AppError(httpStatus.NOT_FOUND, "Booking not found");
+  }
+  if (String(booking.snapperId) !== String(snapperUserId)) {
+    throw new AppError(httpStatus.FORBIDDEN, "Only the assigned snapper can upload gallery assets");
+  }
+
+  const snapperProfile = await SnapperProfile.findOne({ userId: booking.snapperId });
+  if (!snapperProfile) {
+    throw new AppError(httpStatus.NOT_FOUND, "Snapper profile not found");
+  }
+
+  // step 1: persist to storage — recordUploadedDeliveryAssets already cleans up after
+  // itself if this fails, so no extra handling needed here
+  const uploadedAssets = await recordUploadedDeliveryAssets(files, folder);
+
+  // step 2: storage-limit check BEFORE committing to the DB. The bytes are already on
+  // disk (multer wrote them before this function ran) — if the limit would be
+  // exceeded, delete them now rather than leaving them orphaned.
+  const totalBytes = uploadedAssets.reduce((sum, asset) => sum + asset.size, 0);
+  const totalGB = bytesToGB(totalBytes);
+  if (snapperProfile.storageUsedGB + totalGB > snapperProfile.storageLimitGB) {
+    await storage.deleteMany(uploadedAssets.map((asset) => asset.key)).catch((cleanupError) => {
+      console.error("Failed to clean up upload rejected for exceeding storage limit:", cleanupError);
+    });
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `This upload needs ${totalGB.toFixed(2)}GB but only ` +
+        `${(snapperProfile.storageLimitGB - snapperProfile.storageUsedGB).toFixed(2)}GB is available ` +
+        `(${snapperProfile.storageUsedGB.toFixed(2)}/${snapperProfile.storageLimitGB}GB used)`
+    );
+  }
+
+  // step 3: commit — gallery and storage accounting move together
+  const session = await mongoose.startSession();
+  try {
+    let gallery;
+
+    await session.withTransaction(async () => {
+      gallery = await getOrCreateGalleryForBooking(booking, session);
+
+      const newPictures: IGalleryPicture[] = uploadedAssets.map((asset) => ({
+        url: asset.url,
+        key: asset.key,
+        type: mapMimeTypeToAssetType(asset.mimeType),
+        size: asset.size,
+        uploadedAt: new Date(),
+      }));
+
+      gallery.pictures.push(...newPictures);
+      gallery.totalPictures = gallery.pictures.length;
+      gallery.storageSize += totalBytes;
+      await gallery.save({ session });
+
+      await SnapperProfile.updateOne(
+        { _id: snapperProfile._id },
+        { $inc: { storageUsedGB: totalGB } },
+        { session }
+      );
+    });
+
+    return { gallery, uploadedAssets };
+  } finally {
+    await session.endSession();
+  }
 };
 
 // called hourly by booking.cron.ts
@@ -773,7 +961,8 @@ export const bookingService = {
   rejectDelivery,
   getDeliveryHistory,
   recordUploadedDeliveryAssets,
+  uploadDeliveryAssetsToGallery,
   resolveDeliveryAssetPath,
-  deleteDeliveryAssets,
+  deleteGalleryAssets,
   autoAcceptOverdueDeliveries,
 };

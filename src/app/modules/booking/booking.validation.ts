@@ -5,7 +5,6 @@ import {
   DELIVERY_METHODS,
   RejectionCategory,
 } from "./booking.interface";
-import { DeliveryAssetType } from "./delivery.interface";
 
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -42,24 +41,18 @@ const updateBookingStatusValidationSchema = z.object({
   }),
 });
 
-const deliveryAssetSchema = z.object({
-  url: z.string({ required_error: "asset url is required" }).url(),
-  key: z.string().optional(),
-  type: z.nativeEnum(DeliveryAssetType).optional(),
-  size: z.number().optional(),
-  thumbnailUrl: z.string().url().optional(),
-});
-
 const submitDeliveryValidationSchema = z.object({
   body: z
     .object({
       deliveryMethod: z.nativeEnum(DELIVERY_METHODS, {
         required_error: "deliveryMethod is required",
       }),
+      // IN_APP_GALLERY: the gallery the snapper already uploaded pictures into via
+      // POST /:id/delivery/assets — the pictures themselves are never submitted here
+      galleryId: z.string().optional(),
       externalDeliveryLink: z.string().url().optional(),
       linkPassword: z.string().optional(),
       linkExpiresAt: z.coerce.date().optional(),
-      assets: z.array(deliveryAssetSchema).optional(),
       coverImage: z.string().optional(),
       description: z
         .string({ required_error: "description is required" })
@@ -75,15 +68,10 @@ const submitDeliveryValidationSchema = z.object({
         path: ["externalDeliveryLink"],
       }
     )
-    .refine(
-      (data) =>
-        data.deliveryMethod === DELIVERY_METHODS.EXTERNAL_LINK ||
-        (data.assets && data.assets.length > 0),
-      {
-        message: "At least one asset is required unless deliveryMethod is EXTERNAL_LINK",
-        path: ["assets"],
-      }
-    ),
+    .refine((data) => data.deliveryMethod !== DELIVERY_METHODS.IN_APP_GALLERY || !!data.galleryId, {
+      message: "galleryId is required when deliveryMethod is IN_APP_GALLERY",
+      path: ["galleryId"],
+    }),
 });
 
 const rejectDeliveryValidationSchema = z.object({

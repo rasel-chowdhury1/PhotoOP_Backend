@@ -13,6 +13,7 @@ import { portfolioRoutes } from "../modules/portfolio/portfolio.route";
 import { availabilityRoutes } from "../modules/availability/availability.route";
 import { packageRoutes } from "../modules/package/package.route";
 import { bookingRoutes } from "../modules/booking/booking.route";
+import { GalleryRoutes } from "../modules/gallery/gallery.route";
 
 const router = Router();
 
@@ -68,6 +69,10 @@ const moduleRoutes = [
   {
      path: "/bookings",
      route: bookingRoutes
+  },
+  {
+     path: "/gallery",
+     route: GalleryRoutes
   }
 ];
 

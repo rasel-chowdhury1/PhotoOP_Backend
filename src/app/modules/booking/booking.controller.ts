@@ -140,9 +140,11 @@ const uploadDeliveryAssets = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(httpStatus.BAD_REQUEST, "No files were uploaded");
   }
 
+  const { id } = req.params;
+  const { userId } = req.user;
   // set by resolveDeliveryUploadContext, guaranteed present by the time this runs
   const { folder } = req.deliveryUploadContext!;
-  const result = await bookingService.recordUploadedDeliveryAssets(files, folder);
+  const result = await bookingService.uploadDeliveryAssetsToGallery(id, userId, files, folder);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,

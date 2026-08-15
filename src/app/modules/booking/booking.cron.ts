@@ -3,7 +3,7 @@ import path from "path";
 import cron from "node-cron";
 import config from "../../config";
 import { storage } from "../../utils/storage";
-import Delivery from "./delivery.model";
+import Gallery from "../gallery/gallery.model";
 import { bookingService } from "./booking.service";
 
 // runs on the hour, every hour: sweeps DELIVERY_PENDING bookings whose autoAcceptAt
@@ -48,19 +48,21 @@ const walkFiles = async (dir: string): Promise<string[]> => {
   return files;
 };
 
-// staged uploads that are never submitted (via POST .../delivery, which copies their
-// {url,key} into a Delivery doc) would otherwise pile up forever. Anything older than
-// 48h whose key isn't referenced by any Delivery.assets[].key gets deleted.
+// staged uploads that are uploaded but never make it into a Gallery (e.g. the storage-
+// limit check rejected them before the DB commit — which already cleans up immediately
+// — or the snapper just never finished building the gallery) would otherwise pile up
+// forever. Anything older than 48h whose key isn't referenced by any
+// Gallery.pictures[].key gets deleted.
 export const cleanupOrphanedAssets = async (): Promise<number> => {
   const dryRun = process.env.CLEANUP_ORPHANED_ASSETS_DRY_RUN === "true";
   const deliveriesRoot = path.join(config.upload_root, "deliveries");
   const allFiles = await walkFiles(deliveriesRoot);
 
   const referencedKeys = new Set<string>();
-  const deliveries = await Delivery.find({}, { assets: 1 });
-  deliveries.forEach((delivery) => {
-    delivery.assets.forEach((asset) => {
-      if (asset.key) referencedKeys.add(asset.key);
+  const galleries = await Gallery.find({}, { pictures: 1 });
+  galleries.forEach((gallery) => {
+    gallery.pictures.forEach((picture) => {
+      if (picture.key) referencedKeys.add(picture.key);
     });
   });
 

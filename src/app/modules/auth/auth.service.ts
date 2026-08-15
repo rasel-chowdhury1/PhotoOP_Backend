@@ -26,7 +26,6 @@ const login = async (payload: TLogin) => {
   const user = await User.isUserActive(payload?.email);
   
 
-  console.log("user ->>>>> ", user);
   
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found');
@@ -50,7 +49,6 @@ const login = async (payload: TLogin) => {
     role: user?.role,
   };
 
-  console.log({ jwtPayload });
 
   const accessToken = createToken({
     payload: jwtPayload,
