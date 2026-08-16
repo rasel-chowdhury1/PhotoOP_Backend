@@ -1,10 +1,12 @@
+import path from "path";
 import { Types } from "mongoose";
 import httpStatus from "http-status";
 import QueryBuilder from "../../builder/QueryBuilder"; // adjust to your actual query-builder util
 import Gallery from "./gallery.model";
 // import { deleteFileFromStorage } from "../../utils/storage"; // adjust to your actual storage util (e.g. S3/Cloudinary delete)
 import AppError from "../../error/AppError";
-import { deleteFileFromStorage } from "../../utils/storage";
+import config from "../../config";
+import { deleteFileFromStorage, storage } from "../../utils/storage";
 
 // =========================
 // Snapper: list own galleries
@@ -41,6 +43,45 @@ const getSingleGallery = async (galleryId: string,) => {
   }
 
   return gallery;
+};
+
+// =========================
+// View/serve a single image (customer, snapper, or admin — ownership checked directly
+// against the gallery's own userId/snapperId, no separate booking lookup needed)
+// =========================
+const getGalleryImagePath = async (
+  galleryId: string,
+  imageKey: string,
+  requesterId: string,
+  isAdmin: boolean
+) => {
+  const notFound = () => new AppError(httpStatus.NOT_FOUND, "Image not found");
+
+  const gallery = await Gallery.findById(galleryId);
+  if (!gallery) {
+    throw notFound();
+  }
+
+  const isCustomer = String(gallery.userId) === String(requesterId);
+  const isSnapper = String(gallery.snapperId) === String(requesterId);
+  if (!isAdmin && !isCustomer && !isSnapper) {
+    // 404, not 403 — don't reveal this gallery/image exists to a non-owner
+    throw notFound();
+  }
+
+  // look up by exact match against a key WE stored, rather than resolving imageKey
+  // into a filesystem path directly — so there's nothing here for a path-traversal
+  // attempt to exploit, a mismatched key just won't be found
+  const image = gallery.pictures.find((pic) => pic.key === imageKey);
+  if (!image) {
+    throw notFound();
+  }
+
+  if (!(await storage.exists(image.key))) {
+    throw notFound();
+  }
+
+  return path.join(path.resolve(config.upload_root), image.key);
 };
 
 // =========================
@@ -159,6 +200,7 @@ const updateGalleryImage = async (
 export const GalleryService = {
   getMyGalleries,
   getSingleGallery,
+  getGalleryImagePath,
   updateGallery,
   deleteGalleryImage,
   updateGalleryImage,

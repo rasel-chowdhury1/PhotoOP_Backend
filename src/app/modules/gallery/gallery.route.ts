@@ -12,21 +12,33 @@ const router = Router();
 
 // snapper: list all own galleries
 router.get(
-    "/my", 
-    auth(USER_ROLE.SNAPPER), 
+    "/my",
+    auth(USER_ROLE.SNAPPER),
     GalleryController.getMyGalleries
 )
 
 // snapper: get one gallery
 .get(
-    "/:id", 
-    auth(USER_ROLE.SNAPPER, USER_ROLE.USER, USER_ROLE.ADMIN), 
+    "/:id",
+    auth(USER_ROLE.SNAPPER, USER_ROLE.USER, USER_ROLE.ADMIN),
     GalleryController.getSingleGallery
+)
+
+// view/serve a single image — must come before the PATCH/DELETE routes below since
+// they share the same path pattern (different HTTP methods, no conflict, but keeping
+// reads grouped with the other GETs). The image key is multi-segment
+// (e.g. "deliveries/{bookingId}/attempt-1/{uuid}.png"), so this uses a wildcard (`*`)
+// rather than a plain `:imageKey` param — a named param only ever matches a single
+// path segment (no slashes), which is exactly why this route was 404ing before.
+.get(
+  "/:id/images/*",
+  auth(USER_ROLE.SNAPPER, USER_ROLE.USER, USER_ROLE.ADMIN),
+  GalleryController.getGalleryImage
 )
 
 // snapper: edit a specific image (metadata, and/or replace the file itself)
 .patch(
-  "/:id/images/:imageKey",
+  "/:id/images/*",
   auth("snapper"),
   upload.single("file"), // omit if this call is metadata-only, no file replace
   validateRequest(GalleryValidation.updateGalleryImage),
@@ -44,8 +56,8 @@ router.get(
 
 // snapper: delete a specific image from a gallery
 .delete(
-    "/:id/images/:imageKey", 
-    auth(USER_ROLE.SNAPPER), 
+    "/:id/images/*",
+    auth(USER_ROLE.SNAPPER),
     GalleryController.deleteGalleryImage
 )
 

@@ -33,9 +33,28 @@ const getSingleGallery = catchAsync(async (req, res) => {
   });
 });
 
+// GET /galleries/:id/images/* — view/serve a single image. The wildcard (`*`) is
+// captured in req.params[0], since the image key is multi-segment
+// (e.g. "deliveries/{bookingId}/attempt-1/{uuid}.png") and a named `:param` can only
+// ever match one path segment.
+const getGalleryImage = catchAsync(async (req, res) => {
+  const { userId, role } = req.user;
+  const { id } = req.params;
+  const imageKey = req.params[0];
+
+  const absolutePath = await GalleryService.getGalleryImagePath(
+    id,
+    imageKey,
+    userId,
+    role === "admin"
+  );
+
+  res.sendFile(absolutePath);
+});
+
 // PATCH /galleries/:id  — update name/status
 const updateGallery = catchAsync(async (req, res) => {
-  const snapperId = req.user.id;
+  const snapperId = req.user.userId;
   const { id } = req.params;
 
   const result = await GalleryService.updateGallery(id, snapperId, req.body);
@@ -48,12 +67,11 @@ const updateGallery = catchAsync(async (req, res) => {
   });
 });
 
-// DELETE /galleries/:id/images/:imageKey
+// DELETE /galleries/:id/images/*
 const deleteGalleryImage = catchAsync(async (req, res) => {
-  const snapperId = req.user.id;
-  const { id, imageKey } = req.params;
-
-  console.log("delete gallery image =>>> ", {id,imageKey})
+  const snapperId = req.user.userId;
+  const { id } = req.params;
+  const imageKey = req.params[0];
 
   const result = await GalleryService.deleteGalleryImage(id, snapperId, imageKey);
 
@@ -65,12 +83,11 @@ const deleteGalleryImage = catchAsync(async (req, res) => {
   });
 });
 
-// PATCH /galleries/:id/images/:imageKey  — metadata edit and/or file replace
+// PATCH /galleries/:id/images/*  — metadata edit and/or file replace
 const updateGalleryImage = catchAsync(async (req, res) => {
-  const snapperId = req.user.id;
-  const { id, imageKey } = req.params;
-
-  console.log("update gallery image =>>> ", {id, imageKey})
+  const snapperId = req.user.userId;
+  const { id } = req.params;
+  const imageKey = req.params[0];
 
   // adjust to however your upload middleware exposes the uploaded file/url
   const newFile = req.file
@@ -94,6 +111,7 @@ const updateGalleryImage = catchAsync(async (req, res) => {
 export const GalleryController = {
   getMyGalleries,
   getSingleGallery,
+  getGalleryImage,
   updateGallery,
   deleteGalleryImage,
   updateGalleryImage,

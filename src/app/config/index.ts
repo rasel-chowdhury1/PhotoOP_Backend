@@ -22,9 +22,9 @@ const payment_cancel_url = process.env.PAYMENT_CANCEL_URL || 'photoop://payment/
 // "local" | "s3" — see src/app/utils/storage/index.ts. Only "local" is implemented.
 const storage_driver = process.env.STORAGE_DRIVER || 'local';
 
-// project-root-level, deliberately NOT under public/ (which express.static serves) —
-// delivery assets must stay private, served only via the protected asset route
-const upload_root = process.env.UPLOAD_ROOT || path.join(process.cwd(), 'uploads');
+// under public/ (served by express.static) so delivery assets share the same
+// uploads convention as profile/portfolio images — lands at public/uploads/deliveries/...
+const upload_root = process.env.UPLOAD_ROOT || path.join(process.cwd(), 'public', 'uploads');
 
 // used to build the URL storage.getUrl() returns for an uploaded asset
 const public_base_url =

@@ -817,12 +817,16 @@ const getOrCreateGalleryForBooking = async (
 ) => {
   let gallery = await Gallery.findOne({ bookingId: booking._id }).session(session);
   if (!gallery) {
+    // fallback only — normally the gallery already exists by upload time, created when
+    // the booking was ACCEPTED (see updateBookingStatus). Same naming convention as there.
+    const pkg = await Package.findById(booking.packageId).select("packageName").session(session);
     const [created] = await Gallery.create(
       [
         {
           userId: booking.userId,
           snapperId: booking.snapperId,
           bookingId: booking._id,
+          name: `${pkg?.packageName || "Photoshoot"} - ${format(booking.bookingDate, "MMM d, yyyy")}`,
           status: GalleryStatus.DRAFT,
         },
       ],
