@@ -94,6 +94,19 @@ const updateMyProfileValidationSchema = z.object({
   }),
 });
 
+const notificationPreferencesSchema = z.object({
+  bookingUpdates: z.boolean().optional(),
+  messageAlerts: z.boolean().optional(),
+  promotionalOffers: z.boolean().optional(),
+});
+
+const updateNotificationSettingsValidationSchema = z.object({
+  body: z.object({
+    pushEnabled: z.boolean().optional(),
+    preferences: notificationPreferencesSchema.optional(),
+  }),
+});
+
 const updateUserStatusValidationSchema = z.object({
   body: z.object({
     status: z.nativeEnum(UserStatus, { required_error: 'status is required' }),
@@ -110,6 +123,7 @@ const updateAdminApprovalValidationSchema = z.object({
 export const userValidation = {
   createUserValidationSchema,
   updateMyProfileValidationSchema,
+  updateNotificationSettingsValidationSchema,
   updateUserStatusValidationSchema,
   updateAdminApprovalValidationSchema,
 };

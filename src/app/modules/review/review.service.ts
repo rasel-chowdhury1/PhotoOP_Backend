@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 import AppError from "../../error/AppError";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { User } from "../user/user.model";
+import Booking from "../booking/booking.model";
+import { BookingStatus } from "../booking/booking.interface";
+import { emitNotification } from "../../../socketIo";
+import { NotificationType } from "../notifications/notifications.interface";
 import Review from "./review.model";
 import { IReview } from "./review.interface";
 
@@ -30,31 +34,102 @@ const recalculateRating = async (receiverId: string | unknown) => {
 };
 
 const createReview = async (
-  payload: Pick<IReview, "receiverId" | "comment" | "rating">,
+  payload: Pick<IReview, "bookingId" | "comment" | "rating">,
   reviewerId: string
 ) => {
-
-  if (String(payload.receiverId) === String(reviewerId)) {
-    throw new AppError(httpStatus.BAD_REQUEST, "You cannot review yourself");
+  const booking = await Booking.findOne({ _id: payload.bookingId, isDeleted: false });
+  if (!booking) {
+    throw new AppError(httpStatus.NOT_FOUND, "Booking not found");
   }
 
+  const isCustomerReviewing = String(booking.userId) === String(reviewerId);
+  const isSnapperReviewing = String(booking.snapperId) === String(reviewerId);
+
+  if (!isCustomerReviewing && !isSnapperReviewing) {
+    throw new AppError(httpStatus.FORBIDDEN, "You are not part of this booking");
+  }
+
+  if (booking.status !== BookingStatus.COMPLETED) {
+    throw new AppError(httpStatus.BAD_REQUEST, "You can only review a completed booking");
+  }
+
+  const alreadyReviewed = isCustomerReviewing ? booking.customerReviewed : booking.snapperReviewed;
+  if (alreadyReviewed) {
+    throw new AppError(httpStatus.CONFLICT, "You have already reviewed this booking");
+  }
+
+  // the receiver is always the other party on this booking — never trust a
+  // client-supplied receiverId, it would let a reviewer rate someone unrelated to this booking
+  const receiverId = isCustomerReviewing ? booking.snapperId : booking.userId;
+
+  const session = await mongoose.startSession();
   let review;
   try {
-    review = await Review.create({ ...payload, reviewerId });
+    await session.withTransaction(async () => {
+      const [created] = await Review.create(
+        [
+          {
+            bookingId: booking._id,
+            reviewerId,
+            receiverId,
+            comment: payload.comment,
+            rating: payload.rating,
+          },
+        ],
+        { session }
+      );
+      review = created;
+
+      if (isCustomerReviewing) {
+        booking.customerReviewed = true;
+      } else {
+        booking.snapperReviewed = true;
+      }
+      await booking.save({ session });
+    });
   } catch (error: any) {
     if (error?.code === 11000) {
-      throw new AppError(httpStatus.CONFLICT, "You have already reviewed this person");
+      throw new AppError(httpStatus.CONFLICT, "You have already reviewed this booking");
     }
     throw error;
+  } finally {
+    await session.endSession();
   }
 
-  await recalculateRating(payload.receiverId);
+  recalculateRating(receiverId).catch((error) => {
+    console.error("Failed to recalculate rating after review creation:", error);
+  });
+
+  User.findById(reviewerId)
+    .select("fullName")
+    .then((reviewer) => {
+      const reviewerName = reviewer?.fullName || "Someone";
+      return emitNotification({
+        userId: reviewerId,
+        receiverId,
+        userMsg: {
+          fullName: reviewerName,
+          image: "",
+          text: payload.comment
+            ? `${reviewerName} left you a ${payload.rating}-star review: "${payload.comment}"`
+            : `${reviewerName} left you a ${payload.rating}-star review.`,
+          photos: [],
+        },
+        type: NotificationType.REVIEW_RECEIVED,
+      });
+    })
+    .catch((error) => {
+      console.error("Failed to send review notification:", error);
+    });
+
   return review;
 };
 
 const getReviewsForReceiver = async (receiverId: string, query: Record<string, unknown>) => {
   const reviewQuery = new QueryBuilder(
-    Review.find({ receiverId }).populate("reviewerId", "fullName profileImage"),
+    Review.find({ receiverId })
+      .populate("reviewerId", "fullName profileImage")
+      .populate("bookingId", "bookingId bookingDate"),
     query
   )
     .search(["comment"])
@@ -70,7 +145,9 @@ const getReviewsForReceiver = async (receiverId: string, query: Record<string, u
 
 const getReviewsByReviewer = async (reviewerId: string, query: Record<string, unknown>) => {
   const reviewQuery = new QueryBuilder(
-    Review.find({ reviewerId }).populate("receiverId", "fullName profileImage"),
+    Review.find({ reviewerId })
+      .populate("receiverId", "fullName profileImage")
+      .populate("bookingId", "bookingId bookingDate"),
     query
   )
     .search(["comment"])
@@ -88,7 +165,8 @@ const getAllReviews = async (query: Record<string, unknown>) => {
   const reviewQuery = new QueryBuilder(
     Review.find()
       .populate("reviewerId", "fullName profileImage")
-      .populate("receiverId", "fullName profileImage"),
+      .populate("receiverId", "fullName profileImage")
+      .populate("bookingId", "bookingId bookingDate"),
     query
   )
     .filter()
@@ -104,7 +182,8 @@ const getAllReviews = async (query: Record<string, unknown>) => {
 const getReviewById = async (id: string) => {
   const review = await Review.findById(id)
     .populate("reviewerId", "fullName profileImage")
-    .populate("receiverId", "fullName profileImage");
+    .populate("receiverId", "fullName profileImage")
+    .populate("bookingId", "bookingId bookingDate");
 
   if (!review) {
     throw new AppError(httpStatus.NOT_FOUND, "Review not found");
@@ -147,6 +226,18 @@ const deleteReview = async (id: string, authUserId: string, isAdmin: boolean) =>
 
   const receiverId = review.receiverId;
   await review.deleteOne();
+
+  if (review.bookingId) {
+    const relatedBooking = await Booking.findById(review.bookingId).select("userId");
+    if (relatedBooking) {
+      const wasCustomerReview = String(relatedBooking.userId) === String(review.reviewerId);
+      await Booking.updateOne(
+        { _id: review.bookingId },
+        wasCustomerReview ? { customerReviewed: false } : { snapperReviewed: false }
+      );
+    }
+  }
+
   await recalculateRating(receiverId);
 };
 

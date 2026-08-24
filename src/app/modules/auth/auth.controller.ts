@@ -42,6 +42,19 @@ const login = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// logout
+const logout = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.user;
+  const result = await authServices.logout(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Logged out successfully',
+    data: result,
+  });
+});
+
 // change password
 const changePassword = catchAsync(async (req: Request, res: Response) => {
   console.log("exist change password....");
@@ -134,6 +147,7 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
 
 export const authControllers = {
   login,
+  logout,
   changePassword,
   forgotPassword,
   forgotPasswordOtpMatch,

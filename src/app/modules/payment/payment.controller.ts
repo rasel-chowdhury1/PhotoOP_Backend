@@ -18,6 +18,53 @@ const stripeWebhook = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getMyTransactions = catchAsync(async (req: Request, res: Response) => {
+  const { userId, role } = req.user;
+  const result = await paymentService.getMyTransactions(
+    userId,
+    role as "user" | "snapper",
+    req.query
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Transactions retrieved successfully",
+    data: result,
+  });
+});
+
+const getAllTransactions = catchAsync(async (req: Request, res: Response) => {
+  const result = await paymentService.getAllTransactions(req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Transactions retrieved successfully",
+    data: result,
+  });
+});
+
+const getTransactionById = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId, role } = req.user;
+  const result = await paymentService.getTransactionById(
+    id,
+    userId,
+    role as "user" | "snapper" | "admin"
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Transaction retrieved successfully",
+    data: result,
+  });
+});
+
 export const paymentController = {
   stripeWebhook,
+  getMyTransactions,
+  getAllTransactions,
+  getTransactionById,
 };

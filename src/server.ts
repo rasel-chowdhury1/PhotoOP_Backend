@@ -38,7 +38,6 @@ async function main() {
       connectTimeoutMS: 10000, // 10 seconds timeout
     });
 
-
     // Stop the connecting animation
     clearInterval(loader);
     logger.info(

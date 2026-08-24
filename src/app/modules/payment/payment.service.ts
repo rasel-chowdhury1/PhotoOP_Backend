@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import httpStatus from "http-status";
 import AppError from "../../error/AppError";
 import config from "../../config";
+import QueryBuilder from "../../builder/QueryBuilder";
 import Payment from "./payment.model";
 import Booking from "../booking/booking.model";
 import Notification from "../notifications/notifications.model";
@@ -11,6 +12,9 @@ import {
   BookingStatus,
   PaymentStatus as BookingPaymentStatus,
 } from "../booking/booking.interface";
+import { emitNotification } from "../../../socketIo";
+import { Types } from "mongoose";
+import { NotificationType } from "../notifications/notifications.interface";
 
 // lazy singleton: constructing Stripe with a blank key throws immediately, so this must
 // NOT run at module load time (would crash the whole server on boot while STRIPE_API_SECRET
@@ -105,13 +109,52 @@ const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
     return;
   }
 
-  // paymentStatus is a separate field from the booking's own lifecycle `status` — a
-  // successful payment does NOT move the booking through PENDING/ACCEPTED/etc; that
-  // still only happens via the snapper/customer/cron actions in booking.service.ts
-  await Booking.updateOne(
-    { _id: payment.bookingId, isDeleted: false },
-    { $set: { paymentStatus: BookingPaymentStatus.PAID } }
+  // ============================================
+  // UPDATE BOOKING PAYMENT STATUS
+  // ============================================
+
+  const updatedBooking = await Booking.findOneAndUpdate(
+    {
+      _id: payment.bookingId,
+      isDeleted: false,
+    },
+    {
+      $set: {
+        paymentStatus: BookingPaymentStatus.PAID,
+      },
+    },
+    {
+      new: true,
+    },
   );
+
+  if (!updatedBooking) {
+    return;
+  }
+
+    // ============================================
+  // SEND PAYMENT SUCCESS NOTIFICATION
+  // ============================================
+
+  emitNotification({
+    userId: updatedBooking.userId as Types.ObjectId,
+    receiverId: updatedBooking.snapperId as Types.ObjectId,
+
+    userMsg: {
+      image: '',
+      text: `Payment for booking ${updatedBooking.bookingId} has been successfully completed. Please review and accept the booking request.`,
+      photos: [],
+    },
+
+    type: NotificationType.BOOKING_CONFIRMED,
+  }).catch((error) => {
+    console.error(
+      'Failed to send payment success notification:',
+      error,
+    );
+  });
+
+
 };
 
 // payment failed/abandoned: mark it FAILED and auto-cancel the booking it was for,
@@ -156,13 +199,26 @@ const markPaymentFailedAndCancelBooking = async (checkoutSessionId: string, reas
   booking.cancellationReason = reason;
   await booking.save();
 
-  Notification.create({
-    userId: booking.userId,
-    receiverId: booking.snapperId,
-    message: { text: `Booking ${booking.bookingId} was cancelled: ${reason}` },
-    type: "booking-cancelled",
+    // ============================================
+  // SEND BOOKING CANCELLATION NOTIFICATION
+  // ============================================
+
+  emitNotification({
+    userId: booking.userId as Types.ObjectId,
+    receiverId: booking.snapperId as Types.ObjectId,
+
+    userMsg: {
+      image: '',
+      text: `Booking ${booking.bookingId} was cancelled: ${reason}`,
+      photos: [],
+    },
+
+    type: NotificationType.BOOKING_CANCELLED,
   }).catch((error) => {
-    console.error("Failed to notify booking cancellation:", error);
+    console.error(
+      'Failed to notify booking cancellation:',
+      error,
+    );
   });
 };
 
@@ -204,7 +260,95 @@ const handleStripeWebhookEvent = async (rawBody: Buffer, signature: string | und
   return { received: true };
 };
 
+// ---------------------------------------------------------------------------
+// Transaction history
+// ---------------------------------------------------------------------------
+
+const TRANSACTION_POPULATE = [
+  { path: "userId", select: "fullName email profileImage" },
+  { path: "bookingId", select: "bookingId fullName snapperId userId bookingDate status totalPrice" },
+];
+
+// a customer's transactions are simply what they paid for; a snapper's transactions
+// are what THEY paid for directly (e.g. a storage upgrade) plus the customer payments
+// received against their own bookings (their earnings) — Payment.userId is always the
+// payer, so the snapper side can only be reached via the linked booking's snapperId
+const getMyTransactions = async (
+  userId: string,
+  role: "user" | "snapper",
+  query: Record<string, unknown>
+) => {
+  let baseFilter: Record<string, unknown>;
+
+  if (role === "snapper") {
+    const snapperBookingIds = await Booking.find({ snapperId: userId }).distinct("_id");
+    baseFilter = { $or: [{ userId }, { bookingId: { $in: snapperBookingIds } }] };
+  } else {
+    baseFilter = { userId };
+  }
+
+  const paymentQuery = new QueryBuilder(
+    Payment.find(baseFilter).populate(TRANSACTION_POPULATE),
+    query
+  )
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await paymentQuery.modelQuery;
+  const meta = await paymentQuery.countTotal();
+  return { meta, result };
+};
+
+const getAllTransactions = async (query: Record<string, unknown>) => {
+  const paymentQuery = new QueryBuilder(
+    Payment.find().populate(TRANSACTION_POPULATE),
+    query
+  )
+    .search(["paymentNumber", "transactionId", "checkoutSessionId"])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await paymentQuery.modelQuery;
+  const meta = await paymentQuery.countTotal();
+  return { meta, result };
+};
+
+const getTransactionById = async (
+  id: string,
+  requesterId: string,
+  role: "user" | "snapper" | "admin"
+) => {
+  const payment = await Payment.findById(id).populate(TRANSACTION_POPULATE);
+  if (!payment) {
+    throw new AppError(httpStatus.NOT_FOUND, "Transaction not found");
+  }
+
+  if (role === "admin") {
+    return payment;
+  }
+
+  const payerId = (payment.userId as any)?._id ?? payment.userId;
+  const isPayer = String(payerId) === String(requesterId);
+
+  const booking = payment.bookingId as any;
+  const bookingSnapperId = booking?.snapperId?._id ?? booking?.snapperId;
+  const isBookingSnapper = Boolean(booking) && String(bookingSnapperId) === String(requesterId);
+
+  if (!isPayer && !isBookingSnapper) {
+    throw new AppError(httpStatus.FORBIDDEN, "You do not have access to this transaction");
+  }
+
+  return payment;
+};
+
 export const paymentService = {
   createCheckoutSessionForBooking,
   handleStripeWebhookEvent,
+  getMyTransactions,
+  getAllTransactions,
+  getTransactionById,
 };

@@ -37,6 +37,23 @@ export type TSocialLinks = {
   website?: string;
 };
 
+// which categories of notification this user wants pushed to them in real time — the
+// in-app Notification record is always created regardless of these settings, they only
+// gate the real-time push (see notifications.utils.ts's isPushAllowed, the single place
+// that reads these to decide whether to push)
+export interface INotificationPreferences {
+  bookingUpdates: boolean;
+  messageAlerts: boolean;
+  promotionalOffers: boolean;
+}
+
+export interface INotificationSettings {
+  // master switch — when false, nothing configurable below is pushed, regardless of
+  // the individual preferences (their stored values are left untouched)
+  pushEnabled: boolean;
+  preferences: INotificationPreferences;
+}
+
 export type TGuardian = {
   name: string;
   email: string;
@@ -87,14 +104,21 @@ export interface TUserCreate {
   guardian?: Partial<TGuardian>;
 
   countryCode?: string;
+  about?: string;
   phoneNumber?: string;
   address?: string;
   location?: ILocation;
   socialLinks?: Partial<TSocialLinks>;
 
+  // this device's push token, kept current on every successful login (see auth.service.ts)
+  fcmToken?: string;
+
   totalReview?: number;
   averageRating?: number;
   favoriteUsers?: Types.ObjectId[] | string[];
+  // optional: pre-existing users may not have this until they first read/update it —
+  // see notifications.utils.ts's getEffectiveNotificationSettings for the safe default
+  notificationSettings?: INotificationSettings;
   status?: UserStatus;
   adminApproval?: AdminApprovalStatus;
   approvalHistory?: IApprovalHistoryEntry[];

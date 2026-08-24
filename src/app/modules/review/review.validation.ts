@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const createReviewValidationSchema = z.object({
   body: z.object({
-    receiverId: z.string({ required_error: "receiverId is required" }),
+    bookingId: z.string({ required_error: "bookingId is required" }),
     comment: z.string().optional(),
     rating: z
       .number({ required_error: "rating is required" })

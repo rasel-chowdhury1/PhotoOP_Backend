@@ -16,11 +16,49 @@ bookingRoutes
     bookingController.createBooking
   )
 
+  .post(
+     "/quick-shoot-request",
+      auth("user"), // only booking owner can create the request
+      // validateRequest(bookingValidation.createQuickShootRequestValidationSchema),
+      bookingController.createQuickShootRequest
+    )
+
+  .patch(
+    "/quick-shoot-request/:id/accept",
+    auth("snapper", "admin"), // snapper or admin can accept
+    bookingController.acceptQuickShootRequest
+  )
+
+  .patch(
+    "/quick-shoot-request/:id/reject",
+    auth("snapper", "admin"), // snapper or admin can reject
+    validateRequest(bookingValidation.rejectQuickShootRequestValidationSchema),
+    bookingController.rejectQuickShootRequest
+  )
+
+  .get(
+      "/quick-shoot-request/my-requests",
+      auth("user", "snapper", "admin"),
+      bookingController.getMyQuickShootRequests
+    )
+
   .get(
     "/my-bookings",
     auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
     bookingController.getMyBookingsAsCustomer
   )
+
+  .get(
+      "/snapper-stats",
+      auth("snapper"),
+      bookingController.getSnapperBookingStats
+    )
+
+  .get(
+  "/my-recent-bookings",
+  auth("user", "snapper"),
+  bookingController.getMyRecentBookings
+)
 
   .get(
     "/snapper-bookings",

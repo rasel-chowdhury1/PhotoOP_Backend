@@ -18,24 +18,33 @@ import { GalleryStatus, IGalleryPicture } from "../gallery/gallery.interface";
 import { bytesToGB } from "../../utils/storage/units";
 import { getOrCreateAvailability, isOverlapping, toMinutes } from "../availability/availability.service";
 import { TDayAvailability, TWeekDay } from "../availability/availability.interface";
-import Notification from "../notifications/notifications.model";
+import { NotificationType } from "../notifications/notifications.interface";
+import { emitNotification } from "../../../socketIo";
 import { paymentService } from "../payment/payment.service";
 import { ADD_ON_CATALOG, DEFAULT_SERVICE_FEE_PERCENTAGE } from "./booking.constants";
 import {
   AddOnKey,
   ALLOWED_TRANSITIONS,
   BookingStatus,
+  CustomerTab,
   DELIVERY_METHODS,
   DeliveryStatus,
+  GetMyQuickShootRequestsPayload,
   ICreateBookingPayload,
   ISelectedAddOn,
   PaymentStatus,
+  QuickShootRequestInput,
+  RescheduleActionInput,
+  SnapperBookingStats,
+  SnapperTab,
 } from "./booking.interface";
 import {
   DeliveryAssetType,
   IRejectDeliveryPayload,
   ISubmitDeliveryPayload,
 } from "./delivery.interface";
+import { getCustomerTabFilter, getSnapperTabFilter } from "./booking.utils";
+import Chat from "../chat/chat.model";
 
 // JS Date#getUTCDay(): 0=Sunday..6=Saturday
 const JS_DAY_TO_WEEK_DAY: TWeekDay[] = [
@@ -57,6 +66,12 @@ const getUtcDayBounds = (date: Date) => {
   return { start, end };
 };
 
+const getUtcMonthBounds = (date: Date) => {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+  return { start, end };
+};
+
 const generateBookingId = () =>
   `BK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -68,12 +83,12 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 // best-effort — a failed notification should never fail the booking action itself.
 // only fires for event types the Notification model's `type` enum actually supports
 // (no "booking requested"/"delivery rejected" entries exist yet, so those are skipped)
-const notifyBookingParties = (params: {
+const notifyBookingParties = async (params: {
   actorId: string;
   bookingCustomerId: string;
   bookingSnapperId: string;
   text: string;
-  type: string;
+  type: NotificationType;
 }) => {
   const recipientIds = new Set<string>();
   if (String(params.bookingCustomerId) !== String(params.actorId)) {
@@ -83,16 +98,31 @@ const notifyBookingParties = (params: {
     recipientIds.add(String(params.bookingSnapperId));
   }
 
-  recipientIds.forEach((receiverId) => {
-    Notification.create({
-      userId: params.actorId,
-      receiverId,
-      message: { text: params.text },
-      type: params.type,
-    }).catch((error) => {
-      console.error("Failed to create booking notification:", error);
+  if (recipientIds.size === 0) {
+    return;
+  }
+
+  try {
+    const actor = await User.findById(params.actorId).select("fullName profileImage");
+
+    recipientIds.forEach((receiverId) => {
+      emitNotification({
+        userId: params.actorId,
+        receiverId,
+        userMsg: {
+          fullName: actor?.fullName,
+          image: actor?.profileImage || "",
+          text: params.text,
+          photos: [],
+        },
+        type: params.type,
+      }).catch((error) => {
+        console.error("Failed to send booking notification:", error);
+      });
     });
-  });
+  } catch (error) {
+    console.error("Failed to look up actor for booking notification:", error);
+  }
 };
 
 // TODO: no refund flow exists yet anywhere in the codebase (no Stripe refund API call
@@ -189,8 +219,11 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   const serviceFee = Math.round(((packagePrice + addOnPrice) * serviceFeePercentage) / 100);
   const totalPrice = packagePrice + addOnPrice + serviceFee;
 
-  const preferredDeliveryMethod = payload.preferredDeliveryMethod || DELIVERY_METHODS.IN_APP_GALLERY;
+  
 
+  const preferredDeliveryMethod = payload.deliveryMethod || DELIVERY_METHODS.IN_APP_GALLERY;
+
+  console.log({payload, preferredDeliveryMethod})
   const booking = await Booking.create({
     bookingId: generateBookingId(),
     userId: customerUserId,
@@ -229,12 +262,23 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   }
 };
 
-const getMyBookingsAsCustomer = async (userId: string, query: Record<string, unknown>) => {
+const getMyBookingsAsCustomer = async (
+  userId: string,
+  query: Record<string, unknown>
+) => {
+  // extract "tab" separately so QueryBuilder doesn't treat it as a raw schema field filter
+  const { status, ...restQuery } = query;
+
+  const tabFilter = status
+    ? getCustomerTabFilter(status as CustomerTab)
+    : {};
+
   const bookingQuery = new QueryBuilder(
-    Booking.find({ userId, isDeleted: false })
+    Booking.find({ userId, isDeleted: false, ...tabFilter })
       .populate("snapperId", "fullName profileImage")
-      .populate("packageId", "packageName price durationValue durationUnit"),
-    query
+      .populate("packageId", "packageName price durationValue durationUnit")
+      .populate("currentDeliveryId"),
+    restQuery
   )
     .search(["bookingId", "fullName", "location"])
     .filter()
@@ -247,12 +291,22 @@ const getMyBookingsAsCustomer = async (userId: string, query: Record<string, unk
   return { meta, result };
 };
 
-const getMyBookingsAsSnapper = async (snapperId: string, query: Record<string, unknown>) => {
+const getMyBookingsAsSnapper = async (
+  snapperId: string,
+  query: Record<string, unknown>
+) => {
+  const { status, ...restQuery } = query;
+
+  const tabFilter = status
+    ? getSnapperTabFilter(status as SnapperTab)
+    : {};
+
   const bookingQuery = new QueryBuilder(
-    Booking.find({ snapperId, isDeleted: false })
+    Booking.find({ snapperId, isDeleted: false, ...tabFilter })
       .populate("userId", "fullName profileImage")
-      .populate("packageId", "packageName price durationValue durationUnit"),
-    query
+      .populate("packageId", "packageName price durationValue durationUnit")
+      .populate("currentDeliveryId"),
+    restQuery
   )
     .search(["bookingId", "fullName", "location"])
     .filter()
@@ -332,11 +386,43 @@ const TRANSITION_ROLES: Partial<Record<BookingStatus, Array<"customer" | "snappe
   [BookingStatus.REFUNDED]: [],
 };
 
-// only these transitions have a corresponding entry in the Notification model's
-// `type` enum today — others are silently skipped rather than sent with a made-up type
-const NOTIFICATION_TYPE_BY_STATUS: Partial<Record<BookingStatus, string>> = {
-  [BookingStatus.ACCEPTED]: "booking-confirmed",
-  [BookingStatus.CANCELLED]: "booking-cancelled",
+// only these transitions have a corresponding entry in NotificationType today —
+// others (e.g. UPCOMING) are silently skipped rather than sent with a made-up type
+const buildStatusChangeNotification = (
+  nextStatus: BookingStatus,
+  booking: InstanceType<typeof Booking>,
+  note?: string
+): { type: NotificationType; text: string } | null => {
+  const dateLabel = format(booking.bookingDate, "MMM d, yyyy");
+
+  switch (nextStatus) {
+    case BookingStatus.ACCEPTED:
+      return {
+        type: NotificationType.BOOKING_ACCEPTED,
+        text: `Your booking ${booking.bookingId} for ${dateLabel} has been accepted by the photographer.`,
+      };
+    case BookingStatus.REJECTED:
+      return {
+        type: NotificationType.BOOKING_REJECTED,
+        text: note
+          ? `Your booking ${booking.bookingId} was rejected by the photographer: ${note}`
+          : `Your booking ${booking.bookingId} was rejected by the photographer.`,
+      };
+    case BookingStatus.CANCELLED:
+      return {
+        type: NotificationType.BOOKING_CANCELLED,
+        text: note
+          ? `Booking ${booking.bookingId} has been cancelled: ${note}`
+          : `Booking ${booking.bookingId} has been cancelled.`,
+      };
+    case BookingStatus.SHOOT_COMPLETED:
+      return {
+        type: NotificationType.SHOOT_COMPLETED,
+        text: `The photo shoot for booking ${booking.bookingId} is complete. Your photos will be delivered soon.`,
+      };
+    default:
+      return null;
+  }
 };
 
 const updateBookingStatus = async (
@@ -426,16 +512,28 @@ const updateBookingStatus = async (
       name: `${pkg?.packageName || "Photoshoot"} - ${format(booking.bookingDate, "MMM d, yyyy")}`,
     });
   }
+
+    // Create a direct chat between the customer and snapper if one doesn't already exist
+  const existingChat = await Chat.findOne({
+    users: { $all: [booking.userId, booking.snapperId], $size: 2 },
+  });
+
+  if (!existingChat) {
+    await Chat.create({
+      users: [booking.userId, booking.snapperId],
+      createdBy: authUserId, // whoever accepted the booking (the snapper, in this flow)
+    });
+  }
 }
 
-  const notificationType = NOTIFICATION_TYPE_BY_STATUS[nextStatus];
-  if (notificationType) {
+  const statusNotification = buildStatusChangeNotification(nextStatus, booking, note);
+  if (statusNotification) {
     notifyBookingParties({
       actorId: authUserId,
       bookingCustomerId: booking.userId.toString(),
       bookingSnapperId: booking.snapperId.toString(),
-      text: `Booking ${booking.bookingId} was ${nextStatus}.`,
-      type: notificationType,
+      text: statusNotification.text,
+      type: statusNotification.type,
     });
   }
 
@@ -546,6 +644,14 @@ const submitDelivery = async (
       await booking.save({ session });
     });
 
+    notifyBookingParties({
+      actorId: snapperUserId,
+      bookingCustomerId: booking.userId.toString(),
+      bookingSnapperId: booking.snapperId.toString(),
+      text: `Your photos for booking ${booking.bookingId} are ready! Please review your gallery and accept the delivery within 7 days.`,
+      type: NotificationType.DELIVERY_PENDING,
+    });
+
     return { booking, delivery };
   } finally {
     await session.endSession();
@@ -586,8 +692,8 @@ const completeBookingDelivery = async (
     actorId,
     bookingCustomerId: booking.userId.toString(),
     bookingSnapperId: booking.snapperId.toString(),
-    text: `Booking ${booking.bookingId} is complete.`,
-    type: "booking-completed",
+    text: `Booking ${booking.bookingId} is now complete (${note}). Payout will be released to the photographer.`,
+    type: NotificationType.BOOKING_COMPLETED,
   });
 };
 
@@ -680,6 +786,25 @@ const rejectDelivery = async (
         note: payload.rejectionReason,
       });
       await booking.save({ session });
+    });
+
+    const notification =
+      nextStatus === BookingStatus.DISPUTED
+        ? {
+            type: NotificationType.BOOKING_DISPUTED,
+            text: `Booking ${booking.bookingId} has been marked as disputed after reaching the maximum number of delivery attempts. Our support team will step in to help resolve this.`,
+          }
+        : {
+            type: NotificationType.DELIVERY_REJECTED,
+            text: `Your delivery for booking ${booking.bookingId} was rejected: ${payload.rejectionReason}. Please review and resubmit.`,
+          };
+
+    notifyBookingParties({
+      actorId: customerUserId,
+      bookingCustomerId: booking.userId.toString(),
+      bookingSnapperId: booking.snapperId.toString(),
+      text: notification.text,
+      type: notification.type,
     });
 
     return booking;
@@ -953,6 +1078,344 @@ const autoAcceptOverdueDeliveries = async () => {
   return acceptedCount;
 };
 
+const getMyRecentBookings = async (
+  userId: string,
+  role: "user" | "snapper",
+  limit = 5
+) => {
+  const filterField = role === "snapper" ? "snapperId" : "userId";
+  const populateField = role === "snapper" ? "userId" : "snapperId";
+
+  const bookings = await Booking.find({ [filterField]: userId, isDeleted: false })
+    .populate(populateField, "fullName profileImage")
+    .populate("packageId", "packageName price durationValue durationUnit")
+    .sort({ createdAt: -1 })
+    .limit(limit);
+
+  return bookings;
+};
+
+
+
+
+const getSnapperBookingStats = async (snapperId: string): Promise<SnapperBookingStats> => {
+  const now = new Date();
+  const { start: monthStart, end: monthEnd } = getUtcMonthBounds(now);
+
+  const baseFilter = { snapperId, isDeleted: false };
+
+  const [
+    totalPending,
+    totalUpcoming,
+    totalCompleted,
+    bookingsThisMonth,
+    earningsAggregate,
+    snapperUser,
+  ] = await Promise.all([
+    // Pending: booking sent by customer, snapper hasn't accepted/rejected yet
+    Booking.countDocuments({
+      ...baseFilter,
+      status: BookingStatus.PENDING,
+    }),
+
+    // Upcoming: accepted, shoot date is in the future
+    Booking.countDocuments({
+      ...baseFilter,
+      status: BookingStatus.ACCEPTED,
+      bookingDate: { $gte: now },
+    }),
+
+    // Completed
+    Booking.countDocuments({
+      ...baseFilter,
+      status: BookingStatus.COMPLETED,
+    }),
+
+    // scheduled (bookingDate) within the current calendar month, any status
+    Booking.countDocuments({
+      ...baseFilter,
+      bookingDate: { $gte: monthStart, $lt: monthEnd },
+    }),
+
+    // net earnings = totalPrice minus the platform's serviceFee, only for bookings that
+    // are both COMPLETED and actually PAID. .aggregate() bypasses Mongoose's automatic
+    // string->ObjectId casting, so snapperId must be cast explicitly here.
+    Booking.aggregate([
+      {
+        $match: {
+          snapperId: new Types.ObjectId(snapperId),
+          isDeleted: false,
+          status: BookingStatus.COMPLETED,
+          paymentStatus: PaymentStatus.PAID,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $subtract: ["$totalPrice", "$serviceFee"] } },
+        },
+      },
+    ]),
+
+    // Rating info lives on the User document, not Booking
+    User.findById(snapperId).select("averageRating totalReview"),
+  ]);
+
+  return {
+    totalPending,
+    totalUpcoming,
+    totalCompleted,
+    bookingsThisMonth,
+    totalEarnings: earningsAggregate[0]?.total ?? 0,
+    averageRating: (snapperUser as any).averageRating ?? 0,
+    totalReview: (snapperUser as any).totalReview ?? 0,
+  };
+};
+
+
+// How many hours away the shoot must be for it to be considered "quick"
+const QUICK_REQUEST_THRESHOLD_HOURS = 48;
+
+const createQuickShootRequest = async (payload: QuickShootRequestInput) => {
+
+  console.log({payload})
+  const booking = await Booking.findById(payload.bookingId);
+
+  if (!booking || booking.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "Booking not found.");
+  }
+
+  if (String(booking.userId) !== String(payload.requestedBy)) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "You can only request a reschedule for your own booking."
+    );
+  }
+
+  // Only bookings that are still active/ongoing can be rescheduled
+  const nonReschedulableStatuses = [
+    BookingStatus.CANCELLED,
+    BookingStatus.COMPLETED,
+    BookingStatus.REJECTED,
+  ];
+
+  if (nonReschedulableStatuses.includes(booking.status)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `This booking cannot be rescheduled because of its current status (${booking.status}).`
+    );
+  }
+
+  // Prevent stacking multiple pending reschedule requests on one booking
+  if (booking.rescheduleRequest && booking.rescheduleRequest.status === "pending") {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "A reschedule request is already pending. Resolve it before creating a new one."
+    );
+  }
+
+  const requestedDate = new Date(payload.requestedBookingDate);
+  const now = new Date();
+
+  if (requestedDate.getTime() <= now.getTime()) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Requested shoot date must be in the future.");
+  }
+
+  // "Quick" only applies when the new date is earlier than the current booking date
+  const isExpediteRequest = requestedDate.getTime() < new Date(booking.bookingDate).getTime();
+
+  if (!isExpediteRequest) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "A quick shoot request can only be made when the new date is earlier than the current booking date."
+    );
+  }
+
+  const hoursUntilRequestedShoot = (requestedDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+  const isUrgent = hoursUntilRequestedShoot <= QUICK_REQUEST_THRESHOLD_HOURS;
+
+  // Save previous schedule + new requested schedule into rescheduleRequest
+  booking.rescheduleRequest = {
+    requestedBy: new Types.ObjectId(payload.requestedBy),
+    previousBookingDate: booking.bookingDate,
+    previousStartTime: booking.startTime,
+    previousEndTime: booking.endTime,
+    requestedBookingDate: requestedDate,
+    requestedStartTime: payload.requestedStartTime,
+    requestedEndTime: payload.requestedEndTime,
+    reason: payload.reason,
+    status: "pending",
+    actionAt: null,
+  };
+
+  // Log this action in status history for audit trail
+  booking.statusHistory.push({
+    status: booking.status, // booking status itself doesn't change, only the reschedule request is added
+    actionBy: payload.requestedBy,
+    note: isUrgent
+      ? `Quick shoot request: moved up from ${booking.bookingDate.toDateString()} to ${requestedDate.toDateString()} (urgent — only ${Math.round(
+          hoursUntilRequestedShoot
+        )} hours away).`
+      : `Reschedule requested: ${booking.bookingDate.toDateString()} → ${requestedDate.toDateString()}`,
+  });
+
+  await booking.save();
+
+  notifyBookingParties({
+    actorId: payload.requestedBy,
+    bookingCustomerId: booking.userId.toString(),
+    bookingSnapperId: booking.snapperId.toString(),
+    text: isUrgent
+      ? `Urgent: the customer wants to move booking ${booking.bookingId} up to ${requestedDate.toDateString()} (${payload.requestedStartTime} - ${payload.requestedEndTime}), only ${Math.round(
+          hoursUntilRequestedShoot
+        )} hours away. Please respond soon.`
+      : `The customer has requested to reschedule booking ${booking.bookingId} to ${requestedDate.toDateString()} (${payload.requestedStartTime} - ${payload.requestedEndTime}).`,
+    type: NotificationType.QUICK_SHOOT_REQUEST,
+  });
+
+  return booking;
+};
+
+const getMyQuickShootRequests = async (payload: GetMyQuickShootRequestsPayload) => {
+  const { userId, role, status } = payload;
+
+  // Build the base filter depending on whether the requester is the customer or the snapper
+  const baseFilter: Record<string, any> = {
+    isDeleted: false,
+    rescheduleRequest: { $ne: null },
+  };
+
+  if (role === "admin") {
+    // admin can see all quick shoot requests, no owner restriction
+  } else if (role === "snapper") {
+    baseFilter.snapperId = userId;
+  } else {
+    baseFilter.userId = userId;
+  }
+
+  if (status) {
+    baseFilter["rescheduleRequest.status"] = status;
+  }
+
+  const bookings = await Booking.find(baseFilter)
+    .select(
+      "bookingId userId snapperId fullName bookingDate startTime endTime status rescheduleRequest"
+    )
+    .populate("userId", "fullName email")
+    .populate("snapperId", "fullName email")
+    .sort({ "rescheduleRequest.actionAt": -1, createdAt: -1 });
+
+  return bookings;
+};
+
+
+// ==========================
+// Accept quick shoot request
+// ==========================
+const acceptQuickShootRequest = async (payload: RescheduleActionInput) => {
+  const booking = await Booking.findById(payload.bookingId);
+
+  if (!booking || booking.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "Booking not found.");
+  }
+
+  if (!payload.isAdmin && String(booking.snapperId) !== String(payload.actionBy)) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Only this booking's snapper can accept its reschedule request."
+    );
+  }
+
+  const request = booking.rescheduleRequest;
+
+  if (!request || request.status !== "pending") {
+    throw new AppError(httpStatus.BAD_REQUEST, "No pending reschedule request found for this booking.");
+  }
+
+  if (!request.requestedBookingDate || !request.requestedStartTime || !request.requestedEndTime) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Reschedule request is missing requested schedule details.");
+  }
+
+  // Apply the requested schedule as the actual booking schedule
+  booking.bookingDate = request.requestedBookingDate;
+  booking.startTime = request.requestedStartTime;
+  booking.endTime = request.requestedEndTime;
+
+  // Mark the reschedule request as accepted
+  booking.rescheduleRequest.status = "accepted";
+  booking.rescheduleRequest.actionAt = new Date();
+
+  // Log the schedule change in status history
+  booking.statusHistory.push({
+    status: booking.status, // booking status stays the same, only schedule changed
+    actionBy: payload.actionBy,
+    note: `Quick shoot request accepted. Schedule updated to ${request.requestedBookingDate?.toDateString()} (${request.requestedStartTime} - ${request.requestedEndTime}).`,
+  });
+
+  await booking.save();
+
+  notifyBookingParties({
+    actorId: payload.actionBy,
+    bookingCustomerId: booking.userId.toString(),
+    bookingSnapperId: booking.snapperId.toString(),
+    text: `Good news! Your quick shoot request for booking ${booking.bookingId} was accepted. New schedule: ${request.requestedBookingDate?.toDateString()} (${request.requestedStartTime} - ${request.requestedEndTime}).`,
+    type: NotificationType.QUICK_SHOOT_ACCEPTED,
+  });
+
+  return booking;
+};
+
+// ==========================
+// Reject quick shoot request
+// ==========================
+const rejectQuickShootRequest = async (payload: RescheduleActionInput) => {
+  const booking = await Booking.findById(payload.bookingId);
+
+  if (!booking || booking.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "Booking not found.");
+  }
+
+  if (!payload.isAdmin && String(booking.snapperId) !== String(payload.actionBy)) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Only this booking's snapper can reject its reschedule request."
+    );
+  }
+
+  const request = booking.rescheduleRequest;
+
+  if (!request || request.status !== "pending") {
+    throw new AppError(httpStatus.BAD_REQUEST, "No pending reschedule request found for this booking.");
+  }
+
+  // Original booking date/time remains untouched on reject
+  booking.rescheduleRequest.status = "rejected";
+  booking.rescheduleRequest.actionAt = new Date();
+
+  // Log the rejection in status history
+  booking.statusHistory.push({
+    status: booking.status, // booking status unaffected by a rejected reschedule request
+    actionBy: payload.actionBy,
+    note: payload.rejectionReason
+      ? `Quick shoot request rejected. Reason: ${payload.rejectionReason}`
+      : `Quick shoot request rejected. Original schedule (${booking.bookingDate.toDateString()}, ${booking.startTime} - ${booking.endTime}) remains unchanged.`,
+  });
+
+  await booking.save();
+
+  notifyBookingParties({
+    actorId: payload.actionBy,
+    bookingCustomerId: booking.userId.toString(),
+    bookingSnapperId: booking.snapperId.toString(),
+    text: payload.rejectionReason
+      ? `Your quick shoot request for booking ${booking.bookingId} was declined: ${payload.rejectionReason}. The original schedule remains unchanged.`
+      : `Your quick shoot request for booking ${booking.bookingId} was declined. The original schedule remains unchanged.`,
+    type: NotificationType.QUICK_SHOOT_REJECTED,
+  });
+
+  return booking;
+};
+
 export const bookingService = {
   createBooking,
   getMyBookingsAsCustomer,
@@ -969,4 +1432,10 @@ export const bookingService = {
   resolveDeliveryAssetPath,
   deleteGalleryAssets,
   autoAcceptOverdueDeliveries,
+  getSnapperBookingStats,
+  getMyRecentBookings,
+  createQuickShootRequest,
+  getMyQuickShootRequests,
+  acceptQuickShootRequest,
+  rejectQuickShootRequest
 };

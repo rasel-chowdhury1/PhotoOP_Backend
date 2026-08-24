@@ -14,6 +14,9 @@ import { availabilityRoutes } from "../modules/availability/availability.route";
 import { packageRoutes } from "../modules/package/package.route";
 import { bookingRoutes } from "../modules/booking/booking.route";
 import { GalleryRoutes } from "../modules/gallery/gallery.route";
+import { ChatRoutes } from "../modules/chat/chat.route";
+import { messageRoutes } from "../modules/message/message.route";
+import { analyticsRoutes } from "../modules/analytics/analytics.route";
 
 const router = Router();
 
@@ -73,7 +76,19 @@ const moduleRoutes = [
   {
      path: "/gallery",
      route: GalleryRoutes
-  }
+  },
+     {
+   path: "/chat",
+   route: ChatRoutes
+   },
+   {
+   path: "/message",
+   route: messageRoutes
+   },
+   {
+   path: "/analytics",
+   route: analyticsRoutes
+   },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));

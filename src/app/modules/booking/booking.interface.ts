@@ -106,7 +106,7 @@ export interface ICreateBookingPayload {
   selectedAddOnKeys?: AddOnKey[];
   // the customer's preference at booking time — the snapper's actual delivery method
   // for a given attempt lives on the Delivery doc (see delivery.interface.ts)
-  preferredDeliveryMethod?: DELIVERY_METHODS;
+  deliveryMethod?: DELIVERY_METHODS;
 }
 
 export interface IBooking {
@@ -129,6 +129,7 @@ export interface IBooking {
   serviceFee: number;
   totalPrice: number;
   preferredDeliveryMethod: DELIVERY_METHODS;
+  qrCodeFromSnapper: boolean;
 
   // delivery lifecycle
   currentDeliveryId?: Types.ObjectId | string | null;
@@ -160,8 +161,65 @@ export interface IBooking {
   rejectedAt?: Date;
   rejectionReason?: string;
 
-  // review is a separate collection — this just prevents prompting twice, not a status
-  hasReviewed?: boolean;
+  // review is a separate collection — these just prevent prompting either side twice,
+  // not a status. A booking can carry up to two reviews: customer -> snapper and
+  // snapper -> customer.
+  customerReviewed?: boolean;
+  snapperReviewed?: boolean;
 
   isDeleted?: boolean;
 }
+
+
+export interface RescheduleActionInput {
+  bookingId: string; // Booking._id
+  actionBy: string; // userId of the snapper (or admin) taking the action
+  isAdmin?: boolean; // admin bypasses the "must be this booking's snapper" ownership check
+  rejectionReason?: string; // only relevant for reject
+}
+
+export interface QuickShootRequestInput {
+  bookingId: string; // Booking._id
+  requestedBy: string; // userId making the request
+  requestedBookingDate: Date | string;
+  requestedStartTime: string;
+  requestedEndTime: string;
+  reason?: string;
+}
+
+export interface GetMyQuickShootRequestsPayload {
+  userId: string;
+  role: string; // "user" (customer) or "snapper" or "admin"
+  status?: "pending" | "accepted" | "rejected"; // optional filter
+}
+
+export type CustomerTab =
+  | "in_progress"
+  | "upcoming"
+  | "requests"
+  | "deliveries"
+  | "completed"
+  | "cancelled";
+
+export type SnapperTab =
+  | "in_progress"
+  | "upcoming"
+  | "new_requests"
+  | "pending_delivery"
+  | "completed"
+  | "cancelled";
+
+export interface SnapperBookingStats {
+  totalPending: number;
+  totalUpcoming: number;
+  totalCompleted: number;
+  // bookings scheduled (bookingDate) within the current calendar month, any status
+  bookingsThisMonth: number;
+  // net of the platform's serviceFee — what's actually owed/paid out to the snapper,
+  // summed over COMPLETED + PAID bookings only
+  totalEarnings: number;
+  averageRating: number;
+  totalReview: number;
+}
+
+

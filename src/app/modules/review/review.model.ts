@@ -3,6 +3,11 @@ import { IReview } from "./review.interface";
 
 const reviewSchema = new Schema<IReview>(
   {
+    bookingId: {
+      type: Schema.Types.ObjectId,
+      ref: "Booking",
+      required: true,
+    },
     reviewerId: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -28,8 +33,9 @@ const reviewSchema = new Schema<IReview>(
   { timestamps: true }
 );
 
-// a reviewer can only leave one review per receiver
-reviewSchema.index({ reviewerId: 1, receiverId: 1 }, { unique: true });
+// a booking can carry two reviews (customer -> snapper and snapper -> customer), but
+// each side can only review that booking once
+reviewSchema.index({ bookingId: 1, reviewerId: 1 }, { unique: true });
 
 const Review = model<IReview>("Review", reviewSchema);
 

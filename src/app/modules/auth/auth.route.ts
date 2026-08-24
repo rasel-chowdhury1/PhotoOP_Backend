@@ -8,7 +8,13 @@ export const authRoutes = Router();
 
 authRoutes
   .post('/login', authControllers.login)
-  
+
+  .post(
+    '/logout',
+    auth('user', 'snapper', 'admin'),
+    authControllers.logout,
+  )
+
   .post(
     '/refresh-token',
     validateRequest(authValidation.refreshTokenValidationSchema),

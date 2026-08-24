@@ -15,10 +15,14 @@ import { GUARDIAN_VERIFICATION_PURPOSE, requiresGuardianVerification } from './u
 import { User } from './user.model';
 import SnapperProfile from '../snapperProfile/snapperProfile.model';
 import Package, { DurationUnit } from '../package/package.model';
+import Booking from '../booking/booking.model';
+import { BookingStatus } from '../booking/booking.interface';
 import {
   AdminApprovalStatus,
   DeleteAccountPayload,
   GuardianApprovalStatus,
+  INotificationPreferences,
+  INotificationSettings,
   TSignupPayload,
   TUser,
   TUserCreate,
@@ -26,6 +30,10 @@ import {
   UserStatus,
 } from './user.interface';
 import { getOrCreateAvailability } from '../availability/availability.service';
+import { getAdminData } from '../../DB/adminStrore';
+import { NotificationType } from '../notifications/notifications.interface';
+import { getEffectiveNotificationSettings } from '../notifications/notifications.utils';
+import { emitNotification } from '../../../socketIo';
 
 export interface OTPVerifyAndCreateUserProps {
   otp: string;
@@ -377,6 +385,7 @@ const otpVerifyAndCreateUser = async ({ otp, token }: OTPVerifyAndCreateUserProp
           fullName,
           dateOfBirth,
           countryCode,
+          about,
           phoneNumber,
           address,
           guardian,
@@ -415,6 +424,36 @@ const otpVerifyAndCreateUser = async ({ otp, token }: OTPVerifyAndCreateUserProp
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
   }
+
+  if (user) {
+      const admin = getAdminData();
+
+      if (admin) {
+        const notificationType =
+          role === UserRole.SNAPPER
+            ? NotificationType.SNAPPER_VERIFICATION_REQUEST
+            : NotificationType.USER_JOINED;
+
+        const notificationText =
+          role === UserRole.SNAPPER
+            ? `${user.fullName} has created a new Snapper account and is waiting for verification.`
+            : `${user.fullName} has joined the platform.`;
+
+        emitNotification({
+          userId: user._id ,
+          receiverId: (admin as any)._id ,
+          userMsg: {
+            fullName: user.fullName,
+            image: '',
+            text: notificationText,
+            photos: [],
+          },
+          type: notificationType,
+        }).catch((error) => {
+          console.error('Failed to emit notification:', error);
+        });
+      }
+    }
 
   const jwtPayload: { userId: string; role: string; email: string } = {
     email: user.email,
@@ -464,6 +503,10 @@ const updateMyProfile = async (id: string, payload: Partial<TUserCreate>) => {
     approvalHistory,
     totalReview,
     averageRating,
+    // validateRequest doesn't strip unrecognized body fields, so this must be excluded
+    // explicitly — otherwise a client could smuggle it through this generic endpoint and
+    // replace the whole subdocument, bypassing updateMyNotificationSettings's safe merge
+    notificationSettings,
     ...rest
   } = payload;
 
@@ -514,6 +557,93 @@ const updateMyProfile = async (id: string, payload: Partial<TUserCreate>) => {
   triggerGuardianVerificationIfNeeded(user);
 
   return user;
+};
+
+const getMyNotificationSettings = async (userId: string) => {
+  const user = await User.findById(userId).select('notificationSettings');
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // safe even for pre-existing users with no notificationSettings stored at all
+  return getEffectiveNotificationSettings(user.notificationSettings);
+};
+
+const updateMyNotificationSettings = async (
+  userId: string,
+  payload: { pushEnabled?: boolean; preferences?: Partial<INotificationPreferences> }
+) => {
+  const existingUser = await User.findById(userId).select('notificationSettings');
+  if (!existingUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  // merge over the effective (defaulted) current settings so an unspecified key is left
+  // exactly as it was — e.g. { preferences: { messageAlerts: false } } only touches that
+  // one key, not pushEnabled or the other two preferences
+  const current = getEffectiveNotificationSettings(existingUser.notificationSettings);
+
+  const merged: INotificationSettings = {
+    pushEnabled: payload.pushEnabled ?? current.pushEnabled,
+    preferences: {
+      ...current.preferences,
+      ...payload.preferences,
+    },
+  };
+
+  // findByIdAndUpdate, not existingUser.save() — existingUser was fetched with a field
+  // projection (.select), so .save() would run full-document validation against an
+  // instance that's missing fullName/email/password/role/etc. and fail
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { notificationSettings: merged },
+    { new: true, runValidators: true }
+  ).select('notificationSettings');
+
+  if (!user) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Notification settings update failed');
+  }
+
+  return getEffectiveNotificationSettings(user.notificationSettings);
+};
+
+// this user's booking counts (as the customer, i.e. Booking.userId) plus their 6 most
+// recent bookings — the counts and totalReview/averageRating-style summary a dashboard
+// needs, without pulling every booking down to compute it client-side
+const getUserBookingOverview = async (userId: string) => {
+  const now = new Date();
+
+  const [totalBookings, completedBookings, upcomingBookings, recentBookings] = await Promise.all([
+    Booking.countDocuments({ userId, isDeleted: false }),
+
+    Booking.countDocuments({
+      userId,
+      isDeleted: false,
+      status: BookingStatus.COMPLETED,
+    }),
+
+    // same "upcoming" definition used by booking.service.ts's getSnapperBookingStats:
+    // accepted, with the shoot date still ahead
+    Booking.countDocuments({
+      userId,
+      isDeleted: false,
+      status: BookingStatus.ACCEPTED,
+      bookingDate: { $gte: now },
+    }),
+
+    Booking.find({ userId, isDeleted: false })
+      .populate('snapperId', 'fullName profileImage')
+      .populate('packageId', 'packageName price durationValue durationUnit')
+      .sort({ createdAt: -1 })
+      .limit(6),
+  ]);
+
+  return {
+    totalBookings,
+    completedBookings,
+    upcomingBookings,
+    recentBookings,
+  };
 };
 
 const deleteMyAccount = async (id: string, payload: DeleteAccountPayload) => {
@@ -803,6 +933,9 @@ export const userService = {
   getUserById,
   getUserByEmail,
   updateMyProfile,
+  getMyNotificationSettings,
+  updateMyNotificationSettings,
+  getUserBookingOverview,
   deleteMyAccount,
   updateUserStatus,
   updateAdminApproval,

@@ -59,6 +59,25 @@ userRoutes
     userController.getMyFavoriteUsers,
   )
 
+  .get(
+    '/notification-settings',
+    auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+    userController.getMyNotificationSettings,
+  )
+
+  .patch(
+    '/notification-settings',
+    auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+    validateRequest(userValidation.updateNotificationSettingsValidationSchema),
+    userController.updateMyNotificationSettings,
+  )
+
+  .get(
+    '/booking-overview',
+    auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+    userController.getMyBookingOverview,
+  )
+
 
 
   .get(

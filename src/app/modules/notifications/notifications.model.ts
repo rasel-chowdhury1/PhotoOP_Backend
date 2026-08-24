@@ -1,5 +1,5 @@
 import { Schema, model } from 'mongoose';
-import { INotification } from './notifications.interface';
+import { INotification, NotificationType } from './notifications.interface';
 
 
 const NotificationSchema = new Schema<INotification>(
@@ -16,7 +16,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     message: {
       type: {
-        fullName: {type: String, default: false},
+        fullName: {type: String, default: "System"},
         image: { type: String, default: "" }, // Store the image URL or path
         text: { type: String, required: true },  // Store additional data
         photos: { type: [String], default: [] }, // Optional array of photo URLs or paths
@@ -25,8 +25,9 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ["user-joined", "new-message", "booking-confirmed", "booking-completed","booking-reschedule-pending", "booking-cancelled", 'review-reminder'],
+      enum: Object.values(NotificationType),
       required: true,
+      index: true,
     },
     isRead: {
       type: Boolean,

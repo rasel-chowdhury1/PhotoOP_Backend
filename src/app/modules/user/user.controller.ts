@@ -119,6 +119,39 @@ const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getMyNotificationSettings = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getMyNotificationSettings(req.user.userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Notification settings retrieved successfully',
+    data: result,
+  });
+});
+
+const updateMyNotificationSettings = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.updateMyNotificationSettings(req.user.userId, req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Notification settings updated successfully',
+    data: result,
+  });
+});
+
+const getMyBookingOverview = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getUserBookingOverview(req.user.userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Booking overview retrieved successfully',
+    data: result,
+  });
+});
+
 const deleteMyAccount = catchAsync(async (req: Request, res: Response) => {
   const result = await userService.deleteMyAccount(req.user.userId, req.body);
 
@@ -233,6 +266,9 @@ export const userController = {
   getAllUsersOverview,
   getMyFavoriteUsers,
   updateMyProfile,
+  getMyNotificationSettings,
+  updateMyNotificationSettings,
+  getMyBookingOverview,
   deleteMyAccount,
   updateUserStatus,
   updateAdminApproval,

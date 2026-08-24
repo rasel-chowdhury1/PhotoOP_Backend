@@ -87,9 +87,27 @@ const rejectDeliveryValidationSchema = z.object({
   }),
 });
 
+const createQuickShootRequestValidationSchema = z.object({
+  body: z.object({
+    bookingId: z.string({ required_error: "bookingId is required" }),
+    requestedBookingDate: z.coerce.date({ required_error: "requestedBookingDate is required" }),
+    requestedStartTime: timeField("requestedStartTime"),
+    requestedEndTime: timeField("requestedEndTime"),
+    reason: z.string().max(500).optional(),
+  }),
+});
+
+const rejectQuickShootRequestValidationSchema = z.object({
+  body: z.object({
+    rejectionReason: z.string().trim().max(500).optional(),
+  }),
+});
+
 export const bookingValidation = {
   createBookingValidationSchema,
   updateBookingStatusValidationSchema,
   submitDeliveryValidationSchema,
   rejectDeliveryValidationSchema,
+  createQuickShootRequestValidationSchema,
+  rejectQuickShootRequestValidationSchema,
 };

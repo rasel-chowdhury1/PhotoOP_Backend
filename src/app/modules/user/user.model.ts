@@ -61,6 +61,27 @@ const SocialLinksSchema = new Schema(
   }
 );
 
+const NotificationPreferencesSchema = new Schema(
+  {
+    bookingUpdates: { type: Boolean, default: true },
+    messageAlerts: { type: Boolean, default: true },
+    promotionalOffers: { type: Boolean, default: true },
+  },
+  {
+    _id: false,
+  }
+);
+
+const NotificationSettingsSchema = new Schema(
+  {
+    pushEnabled: { type: Boolean, default: true },
+    preferences: { type: NotificationPreferencesSchema, default: () => ({}) },
+  },
+  {
+    _id: false,
+  }
+);
+
 const GuardianSchema = new Schema(
   {
     name: {
@@ -151,6 +172,13 @@ const UserSchema = new Schema<TUser, UserModel>(
       default: null,
     },
 
+    about: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: ""
+    },
+
     profileImage: {
       type: String,
       default: ""
@@ -179,6 +207,12 @@ const UserSchema = new Schema<TUser, UserModel>(
     },
 
     address: {
+      type: String,
+      default: ""
+    },
+
+    // this device's push token, kept current on every successful login (see auth.service.ts)
+    fcmToken: {
       type: String,
       default: ""
     },
@@ -215,6 +249,11 @@ const UserSchema = new Schema<TUser, UserModel>(
       type: [Schema.Types.ObjectId],
       ref: 'User',
       default: [],
+    },
+
+    notificationSettings: {
+      type: NotificationSettingsSchema,
+      default: () => ({}),
     },
 
     status: {

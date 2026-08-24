@@ -215,6 +215,13 @@ const BookingSchema = new Schema(
       required: true,
     },
 
+    // whether the snapper physically hands over a printed/scannable QR code for this
+    // delivery (e.g. pointing to the in-app gallery), independent of deliveryMethod
+    qrCodeFromSnapper: {
+      type: Boolean,
+      default: false,
+    },
+
     currentDeliveryId: {
       type: Schema.Types.ObjectId,
       ref: "Delivery",
@@ -295,8 +302,15 @@ const BookingSchema = new Schema(
 
     rejectionReason: String,
 
-    // review is a separate collection — this just prevents prompting twice
-    hasReviewed: {
+    // review is a separate collection — these just prevent prompting either side twice.
+    // a booking can carry up to two reviews: the customer reviewing the snapper, and
+    // the snapper reviewing the customer.
+    customerReviewed: {
+      type: Boolean,
+      default: false,
+    },
+
+    snapperReviewed: {
       type: Boolean,
       default: false,
     },

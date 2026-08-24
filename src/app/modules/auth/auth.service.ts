@@ -35,6 +35,12 @@ const login = async (payload: TLogin) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password does not match');
   }
 
+  // keep this device's push token current on every successful login
+  if (payload.fcmToken && payload.fcmToken !== user.fcmToken) {
+    await User.findByIdAndUpdate(user._id, { fcmToken: payload.fcmToken });
+    user.fcmToken = payload.fcmToken;
+  }
+
   const jwtPayload: {
     userId: string;
     role: string;
@@ -311,6 +317,20 @@ const changePassword = async ({
   return result;
 };
 
+// Logout — this app's tokens are stateless JWTs handed back in the response body (not
+// server-tracked sessions/cookies), so there's nothing to invalidate server-side beyond
+// the one piece of server state tied to this device: its push token. Clearing it stops
+// this device from receiving further real-time pushes for the user until they log back in.
+const logout = async (userId: string) => {
+  const user = await User.findByIdAndUpdate(userId, { fcmToken: '' }, { new: true });
+
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  return null;
+};
+
 // rest ..............................
 
 // Forgot password
@@ -361,6 +381,7 @@ const refreshToken = async (token: string) => {
 
 export const authServices = {
   login,
+  logout,
   forgotPasswordOtpMatch,
   changePassword,
   forgotPasswordByEmail,

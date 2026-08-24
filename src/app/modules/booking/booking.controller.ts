@@ -170,6 +170,118 @@ const serveDeliveryAsset = catchAsync(async (req: Request, res: Response) => {
   res.sendFile(absolutePath);
 });
 
+
+const getSnapperBookingStats = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.user;
+
+  const result = await bookingService.getSnapperBookingStats(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Snapper booking statistics retrieved successfully",
+    data: result,
+  });
+});
+
+const getMyRecentBookings = catchAsync(async (req: Request, res: Response) => {
+  const { userId, role } = req.user;
+  const limit = req.query.limit ? Number(req.query.limit) : 5;
+
+  const result = await bookingService.getMyRecentBookings(userId, role, limit);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Recent bookings retrieved successfully",
+    data: result,
+  });
+});
+
+
+const createQuickShootRequest = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.user;
+
+  
+  const { bookingId, requestedBookingDate, requestedStartTime, requestedEndTime, reason } =
+    req.body;
+
+  const result = await bookingService.createQuickShootRequest({
+    bookingId,
+    requestedBy: userId,
+    requestedBookingDate,
+    requestedStartTime,
+    requestedEndTime,
+    reason,
+  }
+);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Quick shoot request created successfully",
+    data: result,
+  });
+});
+
+
+const getMyQuickShootRequests = catchAsync(async (req: Request, res: Response) => {
+  const { userId, role } = req.user;
+  const { status } = req.query;
+
+  const result = await bookingService.getMyQuickShootRequests({
+    userId,
+    role,
+    status: status as "pending" | "accepted" | "rejected" | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Quick shoot requests retrieved successfully",
+    data: result,
+  });
+});
+
+const acceptQuickShootRequest = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId, role } = req.user;
+
+  const result = await bookingService.acceptQuickShootRequest({
+    bookingId: id,
+    actionBy: userId,
+    isAdmin: role === "admin",
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Quick shoot request accepted",
+    data: result,
+  });
+});
+
+const rejectQuickShootRequest = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId, role } = req.user;
+  const { rejectionReason } = req.body;
+
+  const result = await bookingService.rejectQuickShootRequest({
+    bookingId: id,
+    actionBy: userId,
+    isAdmin: role === "admin",
+    rejectionReason,
+  }
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Quick shoot request rejected",
+    data: result,
+  });
+});
+
 export const bookingController = {
   createBooking,
   getMyBookingsAsCustomer,
@@ -183,4 +295,10 @@ export const bookingController = {
   getDeliveryHistory,
   uploadDeliveryAssets,
   serveDeliveryAsset,
+  getSnapperBookingStats,
+  getMyRecentBookings,
+  createQuickShootRequest,
+  getMyQuickShootRequests,
+  acceptQuickShootRequest,
+  rejectQuickShootRequest
 };
