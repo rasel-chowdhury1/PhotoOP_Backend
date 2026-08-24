@@ -5,7 +5,9 @@ import { handleDeliveryUpload, resolveDeliveryUploadContext } from "../../middle
 import { bookingController } from "./booking.controller";
 import { bookingValidation } from "./booking.validation";
 import { USER_ROLE } from "../user/user.constants";
-
+import fileUpload from "../../middleware/fileUpload";
+import parseData from "../../middleware/parseData";
+const upload = fileUpload('./public/uploads/delivery');
 export const bookingRoutes = Router();
 
 bookingRoutes
@@ -111,13 +113,22 @@ bookingRoutes
     bookingController.getDeliveryHistory
   )
 
+  // .post(
+  //   "/:id/delivery/assets",
+  //   auth(USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+  //   resolveDeliveryUploadContext,
+  //   handleDeliveryUpload,
+  //   bookingController.uploadDeliveryAssets
+  // )
+
   .post(
-    "/:id/delivery/assets",
-    auth(USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
-    resolveDeliveryUploadContext,
-    handleDeliveryUpload,
-    bookingController.uploadDeliveryAssets
-  )
+  '/:id/delivery/assets',
+  auth(USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+  resolveDeliveryUploadContext,
+  upload.array('assets', 500), // adjust field name + maxCount to match your frontend
+  parseData(),
+  bookingController.uploadDeliveryAssets
+)
 
   // wildcard must stay last so it doesn't swallow the more specific delivery routes above
   .get(
