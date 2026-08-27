@@ -1,20 +1,38 @@
-
 import { Request } from 'express';
 import fs from 'fs';
+import path from 'path';
 import multer from 'multer';
+import config from '../config'; // আপনার প্রজেক্ট স্ট্রাকচার অনুযায়ী path ঠিক করুন
 
-// Create a generic file upload function that accepts a directory
+const UPLOAD_ROOT = path.resolve(config.upload_root); // local.storage.ts-এর সাথে same root
+
+const ALLOWED_MIME_TYPES = [
+  'image/png',
+  'image/jpg',
+  'image/jpeg',
+  'image/svg',
+  'image/webp',
+  'application/octet-stream',
+  'image/svg+xml',
+  'video/mp4',
+  'video/avi',
+  'video/mov',
+  'video/mkv',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+// ============================================================
+// 1) পুরনো — static folder upload (business, profile, ইত্যাদি)
+// ============================================================
 const fileUpload = (uploadDirectory: string) => {
-  // Ensure the directory exists or create it
   if (!fs.existsSync(uploadDirectory)) {
     fs.mkdirSync(uploadDirectory, { recursive: true });
   }
 
   const storage = multer.diskStorage({
     destination: function (req: Request, file, cb) {
-      // Set destination based on the provided upload directory
-      // console.log(file);
-      // console.log(req);
       if (file.fieldname === 'introVideo' || file.fieldname === 'video') {
         cb(null, './public/uploads/video');
       } else {
@@ -22,7 +40,6 @@ const fileUpload = (uploadDirectory: string) => {
       }
     },
     filename: function (req: Request, file, cb) {
-      // Generate a unique file name
       const parts = file.originalname.split('.');
       let extension;
       if (parts.length > 1) {
@@ -31,34 +48,16 @@ const fileUpload = (uploadDirectory: string) => {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
       cb(
         null,
-        parts.shift()!.replace(/\s+/g, '_') + '-' + uniqueSuffix + extension,
+        parts.shift()!.replace(/\s+/g, '_') + '-' + uniqueSuffix + extension
       );
     },
   });
 
   const upload = multer({
     storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB limit for files
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req: Request, file, cb) => {
-      // Check file type for video or document
-      const allowedMimeTypes = [
-        'image/png',
-        'image/jpg',
-        'image/jpeg',
-        'image/svg',
-        'image/webp',
-        'application/octet-stream',
-        'image/svg+xml',
-        'video/mp4',
-        'video/avi',
-        'video/mov',
-        'video/mkv',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ];
-
-      if (allowedMimeTypes.includes(file.mimetype)) {
+      if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
         cb(null, true);
       } else {
         cb(new Error('Invalid file type!'));
@@ -67,6 +66,52 @@ const fileUpload = (uploadDirectory: string) => {
   });
 
   return upload;
+};
+
+// ============================================================
+// 2) নতুন — dynamic folder upload (শুধু delivery route-এর জন্য)
+// ============================================================
+export const dynamicFolderUpload = () => {
+  const storage = multer.diskStorage({
+    destination: function (req: Request, _file, cb) {
+      const context = (req as any).deliveryUploadContext;
+      if (!context?.folder) {
+        return cb(new Error('Upload context not resolved before file upload'), '');
+      }
+
+      const targetDir = path.join(UPLOAD_ROOT, context.folder);
+
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+
+      cb(null, targetDir);
+    },
+    filename: function (_req: Request, file, cb) {
+      const parts = file.originalname.split('.');
+      let extension;
+      if (parts.length > 1) {
+        extension = '.' + parts.pop();
+      }
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      cb(
+        null,
+        parts.shift()!.replace(/\s+/g, '_') + '-' + uniqueSuffix + extension
+      );
+    },
+  });
+
+  return multer({
+    storage,
+    limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: (_req: Request, file, cb) => {
+      if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type!'));
+      }
+    },
+  });
 };
 
 export default fileUpload;

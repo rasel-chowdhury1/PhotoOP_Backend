@@ -37,6 +37,13 @@ const PaymentSchema = new Schema(
       default: null,
     },
 
+    // only set for paymentType STORAGE_UPGRADE — how many months of the storagePlan
+    // this payment purchased (see snapperProfileService.upgradeStoragePlan)
+    durationMonths: {
+      type: Number,
+      default: null,
+    },
+
     amount: {
       type: Number,
       required: true,

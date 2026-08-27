@@ -5,9 +5,10 @@ import { handleDeliveryUpload, resolveDeliveryUploadContext } from "../../middle
 import { bookingController } from "./booking.controller";
 import { bookingValidation } from "./booking.validation";
 import { USER_ROLE } from "../user/user.constants";
-import fileUpload from "../../middleware/fileUpload";
+import fileUpload, { dynamicFolderUpload } from "../../middleware/fileUpload";
 import parseData from "../../middleware/parseData";
-const upload = fileUpload('./public/uploads/delivery');
+// const upload = fileUpload('./public/uploads/delivery');
+const upload = dynamicFolderUpload();
 export const bookingRoutes = Router();
 
 bookingRoutes

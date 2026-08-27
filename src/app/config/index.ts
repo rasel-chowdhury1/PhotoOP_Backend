@@ -22,6 +22,16 @@ const payment_cancel_url = process.env.PAYMENT_CANCEL_URL || 'photoop://payment/
 // "local" | "s3" — see src/app/utils/storage/index.ts. Only "local" is implemented.
 const storage_driver = process.env.STORAGE_DRIVER || 'local';
 
+// snapper payout policy — no prior convention existed for any of these, so they default
+// to the safest/most conservative values (no fee, a week-long dispute/refund hold
+// mirroring the existing 7-day delivery auto-accept window) until product specifies
+// real numbers. feePercentage is a fraction of the withdrawal amount (0.02 = 2%).
+const withdrawal = {
+  holdDays: Number(process.env.WITHDRAWAL_HOLD_DAYS) || 7,
+  feePercentage: Number(process.env.WITHDRAWAL_FEE_PERCENTAGE) || 0,
+  minAmount: Number(process.env.WITHDRAWAL_MIN_AMOUNT) || 10,
+};
+
 // under public/ (served by express.static) so delivery assets share the same
 // uploads convention as profile/portfolio images — lands at public/uploads/deliveries/...
 const upload_root = process.env.UPLOAD_ROOT || path.join(process.cwd(), 'public', 'uploads');
@@ -86,4 +96,5 @@ export default {
   smtp,
   aws,
   stripe,
+  withdrawal,
 };

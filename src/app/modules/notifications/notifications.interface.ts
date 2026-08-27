@@ -50,4 +50,12 @@ export enum NotificationType {
   SNAPPER_VERIFICATION_REQUEST = "snapper_verification_request",
   SNAPPER_VERIFICATION_APPROVED = "snapper_verification_approved",
   SNAPPER_VERIFICATION_REJECTED = "snapper_verification_rejected",
+
+  // Snapper payout withdrawals
+  WITHDRAW_REQUESTED = "withdraw_requested",
+  WITHDRAW_PROCESSING = "withdraw_processing",
+  WITHDRAW_COMPLETED = "withdraw_completed",
+  WITHDRAW_FAILED = "withdraw_failed",
+  WITHDRAW_REJECTED = "withdraw_rejected",
+  WITHDRAW_CANCELLED = "withdraw_cancelled",
 }

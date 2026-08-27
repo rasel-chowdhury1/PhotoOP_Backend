@@ -26,6 +26,20 @@ app.set('views', path.join(process.cwd(), 'src', 'views'));
 
 app.use(logHttpRequests);
 
+
+
+
+
+app.use(
+  cors({
+    origin: true,
+    // origin: '',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'token'],
+  }),
+);
+
 // Stripe webhook needs the raw, unparsed request body to verify its signature, so it
 // must be mounted BEFORE express.json() below strips that away — see payment.route.ts
 app.use('/api/v1/payment', paymentRoutes);
@@ -33,15 +47,6 @@ app.use('/api/v1/payment', paymentRoutes);
 //parsers
 app.use(express.json());
 app.use(cookieParser());
-
-app.use(
-  cors({
-    origin: true,
-    // origin: '',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  }),
-);
 
 // Remove duplicate static middleware
 // app.use(app.static('public'));

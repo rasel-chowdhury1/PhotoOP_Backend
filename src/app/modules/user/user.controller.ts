@@ -10,7 +10,7 @@ import { userService } from './user.service';
 const attachSignupFiles = (req: Request, _res: Response, next: NextFunction) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
   if (files?.identityImage?.[0]) {
-    req.body.identityImage = storeFile('identity', files.identityImage[0].filename);
+    req.body.identityImage = storeFile('profile', files.identityImage[0].filename);
   }
   next();
 };
@@ -71,6 +71,42 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Users fetched successfully',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const getAllCustomers = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getAllCustomers(req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Customers fetched successfully',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const getAllSnappers = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getAllSnappers(req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Snappers fetched successfully',
+    meta: result.meta,
+    data: result.result,
+  });
+});
+
+const getPendingSnappers = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getPendingSnappers(req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Pending snappers fetched successfully',
     meta: result.meta,
     data: result.result,
   });
@@ -263,6 +299,9 @@ export const userController = {
   getMyProfile,
   getUserById,
   getAllUsers,
+  getAllCustomers,
+  getAllSnappers,
+  getPendingSnappers,
   getAllUsersOverview,
   getMyFavoriteUsers,
   updateMyProfile,

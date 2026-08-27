@@ -62,7 +62,20 @@ const getAvailabilityAndPackages = catchAsync(
   },
 );
 
+const getStorageUsage = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.user;
+  const result = await snapperProfileService.getStorageUsage(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Storage usage retrieved successfully",
+    data: result,
+  });
+});
+
 export const snapperProfileController = {
   getVerifiedSnappers,
   getAvailabilityAndPackages,
+  getStorageUsage,
 };

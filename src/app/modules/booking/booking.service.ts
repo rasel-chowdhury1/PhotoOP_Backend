@@ -21,6 +21,7 @@ import { TDayAvailability, TWeekDay } from "../availability/availability.interfa
 import { NotificationType } from "../notifications/notifications.interface";
 import { emitNotification } from "../../../socketIo";
 import { paymentService } from "../payment/payment.service";
+import { walletService } from "../wallet/wallet.service";
 import { ADD_ON_CATALOG, DEFAULT_SERVICE_FEE_PERCENTAGE } from "./booking.constants";
 import {
   AddOnKey,
@@ -45,6 +46,7 @@ import {
 } from "./delivery.interface";
 import { getCustomerTabFilter, getSnapperTabFilter } from "./booking.utils";
 import Chat from "../chat/chat.model";
+import serviceChargeModel from "../serviceCharge/serviceCharge.model";
 
 // JS Date#getUTCDay(): 0=Sunday..6=Saturday
 const JS_DAY_TO_WEEK_DAY: TWeekDay[] = [
@@ -215,7 +217,9 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   const selectedAddOns = resolveSelectedAddOns(payload.selectedAddOnKeys);
   const packagePrice = pkg.price;
   const addOnPrice = selectedAddOns.reduce((sum, addOn) => sum + addOn.price, 0);
-  const serviceFeePercentage = DEFAULT_SERVICE_FEE_PERCENTAGE;
+  const serviceCharge = await serviceChargeModel.findOne({ isActive: true, isDeleted: false });
+
+  const serviceFeePercentage = serviceCharge?.value ?? DEFAULT_SERVICE_FEE_PERCENTAGE;
   const serviceFee = Math.round(((packagePrice + addOnPrice) * serviceFeePercentage) / 100);
   const totalPrice = packagePrice + addOnPrice + serviceFee;
 
@@ -509,7 +513,7 @@ const updateBookingStatus = async (
       userId: booking.userId,
       snapperId: booking.snapperId,
       bookingId: booking._id,
-      name: `${pkg?.packageName || "Photoshoot"} - ${format(booking.bookingDate, "MMM d, yyyy")}`,
+      name: `${booking?.fullName || "Photoshoot"} - ${format(booking.bookingDate, "MMM d, yyyy")}`,
     });
   }
 
@@ -684,9 +688,11 @@ const completeBookingDelivery = async (
   });
   await booking.save({ session });
 
-  // TODO: trigger snapper payout release (e.g. a Stripe Connect transfer, or whatever
-  // manual/automated payout workflow gets built) — booking.totalPrice minus platform
-  // fees is now owed to booking.snapperId.
+  // credits booking.totalPrice minus serviceFee into the snapper's wallet pendingBalance
+  // (see wallet.service.ts). No-ops unless paymentStatus is also already PAID — if the
+  // Stripe webhook hasn't landed yet, markPaymentSucceeded credits it instead, whichever
+  // of the two fires last. Idempotent either way (Booking.earningsCreditedAt).
+  await walletService.creditBookingEarning(booking._id, session);
 
   notifyBookingParties({
     actorId,
@@ -1026,6 +1032,8 @@ const uploadDeliveryAssetsToGallery = async (
       gallery.pictures.push(...newPictures);
       gallery.totalPictures = gallery.pictures.length;
       gallery.storageSize += totalBytes;
+
+      console.log({gallery})
       await gallery.save({ session });
 
       await SnapperProfile.updateOne(

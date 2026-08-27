@@ -10,6 +10,7 @@ import config from "../config";
 import { storage } from "../utils/storage";
 import Booking from "../modules/booking/booking.model";
 import { BookingStatus } from "../modules/booking/booking.interface";
+import SnapperProfile from "../modules/snapperProfile/snapperProfile.model";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "video/mp4"];
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -51,12 +52,23 @@ export const resolveDeliveryUploadContext = catchAsync(
       throw new AppError(httpStatus.BAD_REQUEST, "Maximum delivery attempts reached");
     }
 
+    const snapperProfile = await SnapperProfile.findOne({ userId: booking.snapperId });
+    if (snapperProfile?.storageExpiresAt && snapperProfile.storageExpiresAt < new Date()) {
+      throw new AppError(
+        httpStatus.PAYMENT_REQUIRED,
+        "Your storage plan has expired. Please renew to continue uploading."
+      );
+    }
+
     const attempt = booking.deliveryAttempts + 1;
+    
     req.deliveryUploadContext = {
       bookingId,
       attempt,
       folder: `deliveries/${bookingId}/attempt-${attempt}`,
     };
+
+    console.log("delivery upload context =>>> ", req.deliveryUploadContext)
 
     next();
   }

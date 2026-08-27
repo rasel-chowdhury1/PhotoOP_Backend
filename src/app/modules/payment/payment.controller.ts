@@ -18,6 +18,23 @@ const stripeWebhook = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const createStoragePlanCheckout = catchAsync(async (req: Request, res: Response) => {
+  const { userId } = req.user;
+  const { plan, durationMonths } = req.body;
+  const result = await paymentService.createCheckoutSessionForStoragePlan(
+    userId,
+    plan,
+    Number(durationMonths)
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: "Storage plan checkout session created successfully",
+    data: result,
+  });
+});
+
 const getMyTransactions = catchAsync(async (req: Request, res: Response) => {
   const { userId, role } = req.user;
   const result = await paymentService.getMyTransactions(
@@ -64,6 +81,7 @@ const getTransactionById = catchAsync(async (req: Request, res: Response) => {
 
 export const paymentController = {
   stripeWebhook,
+  createStoragePlanCheckout,
   getMyTransactions,
   getAllTransactions,
   getTransactionById,

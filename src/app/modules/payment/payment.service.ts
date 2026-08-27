@@ -13,8 +13,12 @@ import {
   PaymentStatus as BookingPaymentStatus,
 } from "../booking/booking.interface";
 import { emitNotification } from "../../../socketIo";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { NotificationType } from "../notifications/notifications.interface";
+import { StoragePlan } from "../snapperProfile/snapperProfile.interface";
+import { STORAGE_PLAN_CONFIG } from "../snapperProfile/snapperProfile.constant";
+import { snapperProfileService } from "../snapperProfile/snapperProfile.service";
+import { walletService } from "../wallet/wallet.service";
 
 // lazy singleton: constructing Stripe with a blank key throws immediately, so this must
 // NOT run at module load time (would crash the whole server on boot while STRIPE_API_SECRET
@@ -90,6 +94,74 @@ const createCheckoutSessionForBooking = async (
   }
 };
 
+// creates a Payment record (PENDING) + a Stripe Checkout Session for a snapper
+// purchasing/renewing a storage plan, mirroring createCheckoutSessionForBooking above.
+// priceUSD in STORAGE_PLAN_CONFIG is treated as a monthly rate, so the charged amount
+// scales with durationMonths.
+const createCheckoutSessionForStoragePlan = async (
+  snapperUserId: string,
+  plan: StoragePlan,
+  durationMonths: number
+) => {
+  const planConfig = STORAGE_PLAN_CONFIG[plan];
+  if (!planConfig) {
+    throw new AppError(httpStatus.BAD_REQUEST, `Unknown storage plan: ${plan}`);
+  }
+  if (!Number.isInteger(durationMonths) || durationMonths < 1) {
+    throw new AppError(httpStatus.BAD_REQUEST, "durationMonths must be a positive integer");
+  }
+
+  const stripe = getStripeClient();
+  const amount = planConfig.priceUSD * durationMonths;
+
+  const payment = await Payment.create({
+    paymentNumber: generatePaymentNumber(),
+    userId: snapperUserId,
+    paymentType: PaymentType.STORAGE_UPGRADE,
+    storagePlan: plan,
+    durationMonths,
+    amount,
+    currency: "USD",
+    gateway: PaymentGateway.STRIPE,
+    status: PaymentStatus.PENDING,
+  });
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `PhotoOp Storage Plan ${plan} (${durationMonths} month${durationMonths > 1 ? "s" : ""})`,
+            },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${config.payment_success_url}?paymentId=${payment._id}`,
+      cancel_url: `${config.payment_cancel_url}?paymentId=${payment._id}`,
+      client_reference_id: String(payment._id),
+      metadata: {
+        paymentId: String(payment._id),
+        storagePlan: plan,
+        durationMonths: String(durationMonths),
+      },
+    });
+
+    payment.checkoutSessionId = session.id;
+    await payment.save();
+
+    return { payment, checkoutUrl: session.url as string };
+  } catch (error) {
+    await Payment.deleteOne({ _id: payment._id });
+    throw error;
+  }
+};
+
 const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
   const payment = await Payment.findOne({ checkoutSessionId: session.id });
   if (!payment || payment.status === PaymentStatus.SUCCEEDED) {
@@ -104,6 +176,15 @@ const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
     payment.transactionId = transactionId;
   }
   await payment.save();
+
+  if (payment.paymentType === PaymentType.STORAGE_UPGRADE) {
+    await snapperProfileService.upgradeStoragePlan(
+      String(payment.userId),
+      payment.storagePlan as StoragePlan,
+      payment.durationMonths as number
+    );
+    return;
+  }
 
   if (!payment.bookingId) {
     return;
@@ -120,6 +201,7 @@ const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
     },
     {
       $set: {
+        paymentId: payment._id,
         paymentStatus: BookingPaymentStatus.PAID,
       },
     },
@@ -130,6 +212,26 @@ const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
 
   if (!updatedBooking) {
     return;
+  }
+
+  // covers the (rare) case where the Stripe webhook lands AFTER delivery was already
+  // completed — completeBookingDelivery's own call to this already handles the normal
+  // order. No-ops unless status is also already COMPLETED; idempotent either way via
+  // Booking.earningsCreditedAt. Own transaction since this function has no session.
+  if (updatedBooking.status === BookingStatus.COMPLETED) {
+    const earningSession = await mongoose.startSession();
+    try {
+      await earningSession.withTransaction(async () => {
+        await walletService.creditBookingEarning(updatedBooking._id, earningSession);
+      });
+    } catch (error) {
+      console.error(
+        `Failed to credit wallet earning for booking ${updatedBooking._id} after payment success:`,
+        error
+      );
+    } finally {
+      await earningSession.endSession();
+    }
   }
 
     // ============================================
@@ -347,6 +449,7 @@ const getTransactionById = async (
 
 export const paymentService = {
   createCheckoutSessionForBooking,
+  createCheckoutSessionForStoragePlan,
   handleStripeWebhookEvent,
   getMyTransactions,
   getAllTransactions,

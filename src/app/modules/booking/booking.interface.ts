@@ -142,7 +142,12 @@ export interface IBooking {
   completedAt?: Date | null;
   autoAcceptAt?: Date | null;
 
+  // snapper wallet earnings — see wallet.service.ts
+  earningsCreditedAt?: Date | null;
+  earningsReleasedAt?: Date | null;
+
   // payment (separate from BookingStatus — see PaymentStatus doc comment above)
+  paymentId?: Types.ObjectId;
   paymentStatus: PaymentStatus;
   refundAmount?: number;
   refundedAt?: Date | null;

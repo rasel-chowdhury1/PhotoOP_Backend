@@ -1,5 +1,9 @@
 import { PipelineStage } from "mongoose";
+import httpStatus from "http-status";
+import AppError from "../../error/AppError";
 import SnapperProfile from "./snapperProfile.model";
+import { StoragePlan } from "./snapperProfile.interface";
+import { STORAGE_PLAN_CONFIG } from "./snapperProfile.constant";
 import { AdminApprovalStatus, UserRole } from "../user/user.interface";
 import { availabilityService } from "../availability/availability.service";
 import { packageService } from "../package/package.service";
@@ -314,7 +318,67 @@ const getAvailabilityAndPackages = async (userId: string) => {
   };
 };
 
+// called after a successful storage-plan payment (see paymentService.markPaymentSucceeded).
+// Only storagePlan/storageLimitGB/storageExpiresAt move here — storageUsedGB is never
+// touched on a plan change, per the storage-accounting invariant the rest of this
+// system relies on (it's only adjusted on upload and on retention purge).
+const upgradeStoragePlan = async (
+  userId: string,
+  plan: StoragePlan,
+  durationMonths: number
+) => {
+  const planConfig = STORAGE_PLAN_CONFIG[plan];
+  if (!planConfig) {
+    throw new AppError(httpStatus.BAD_REQUEST, `Unknown storage plan: ${plan}`);
+  }
+
+  const snapperProfile = await SnapperProfile.findOne({ userId });
+  if (!snapperProfile) {
+    throw new AppError(httpStatus.NOT_FOUND, "Snapper profile not found");
+  }
+
+  const now = new Date();
+  // extends from storageExpiresAt if it's still in the future (renewing before expiry
+  // shouldn't lose the remaining time), otherwise starts fresh from now
+  const extendFrom =
+    snapperProfile.storageExpiresAt && snapperProfile.storageExpiresAt > now
+      ? snapperProfile.storageExpiresAt
+      : now;
+  const storageExpiresAt = new Date(extendFrom);
+  storageExpiresAt.setMonth(storageExpiresAt.getMonth() + durationMonths);
+
+  snapperProfile.storagePlan = plan;
+  snapperProfile.storageLimitGB = planConfig.storageLimitGB;
+  snapperProfile.storageExpiresAt = storageExpiresAt;
+  await snapperProfile.save();
+
+  return snapperProfile;
+};
+
+const getStorageUsage = async (userId: string) => {
+  const snapperProfile = await SnapperProfile.findOne({ userId });
+  if (!snapperProfile) {
+    throw new AppError(httpStatus.NOT_FOUND, "Snapper profile not found");
+  }
+
+  const planConfig = STORAGE_PLAN_CONFIG[snapperProfile.storagePlan as StoragePlan];
+
+  return {
+    plan: snapperProfile.storagePlan,
+    usedGB: snapperProfile.storageUsedGB,
+    limitGB: snapperProfile.storageLimitGB,
+    percentUsed:
+      snapperProfile.storageLimitGB > 0
+        ? Math.min(100, (snapperProfile.storageUsedGB / snapperProfile.storageLimitGB) * 100)
+        : 0,
+    expiresAt: snapperProfile.storageExpiresAt,
+    retentionDays: planConfig?.retentionDays ?? STORAGE_PLAN_CONFIG[StoragePlan.FREE].retentionDays,
+  };
+};
+
 export const snapperProfileService = {
   getVerifiedSnappers,
   getAvailabilityAndPackages,
+  upgradeStoragePlan,
+  getStorageUsage,
 };

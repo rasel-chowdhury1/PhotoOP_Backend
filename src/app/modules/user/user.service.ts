@@ -738,6 +738,58 @@ const getAllUserCount = async () => {
   return await User.countDocuments();
 };
 
+// customer accounts only — the admin-facing sibling of getAllSnappers/getPendingSnappers
+const getAllCustomers = async (query: Record<string, unknown>) => {
+  const userQuery = new QueryBuilder(User.find({ role: UserRole.USER }), query)
+    .search(['fullName', 'email'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await userQuery.modelQuery;
+  const meta = await userQuery.countTotal();
+  return { meta, result };
+};
+
+// every snapper account regardless of approval status — populated with SnapperProfile
+// (hourlyRate/specialties/storagePlan/etc.) since that's what an admin managing snappers
+// needs, unlike the public getVerifiedSnappers listing in snapperProfile.service.ts
+const getAllSnappers = async (query: Record<string, unknown>) => {
+  const userQuery = new QueryBuilder(
+    User.find({ role: UserRole.SNAPPER }).populate('snapperId'),
+    query
+  )
+    .search(['fullName', 'email'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await userQuery.modelQuery;
+  const meta = await userQuery.countTotal();
+  return { meta, result };
+};
+
+// snappers still awaiting admin approval — the queue updateAdminApproval acts on
+const getPendingSnappers = async (query: Record<string, unknown>) => {
+  const userQuery = new QueryBuilder(
+    User.find({ role: UserRole.SNAPPER, adminApproval: AdminApprovalStatus.PENDING }).populate(
+      'snapperId'
+    ),
+    query
+  )
+    .search(['fullName', 'email'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await userQuery.modelQuery;
+  const meta = await userQuery.countTotal();
+  return { meta, result };
+};
+
 const getUsersOverview = async (userId: string, year: number) => {
   const totalUsers = await User.countDocuments();
 
@@ -943,6 +995,9 @@ export const userService = {
   verifyGuardianEmail,
   getAllUserQuery,
   getAllUserCount,
+  getAllCustomers,
+  getAllSnappers,
+  getPendingSnappers,
   getUsersOverview,
   getMyFavoriteUsers,
   addFavoriteUser,

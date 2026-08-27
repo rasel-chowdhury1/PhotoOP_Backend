@@ -41,9 +41,27 @@ userRoutes
   )
 
   .get(
-    '/all-users-overview', 
-    auth('admin'), 
+    '/all-users-overview',
+    auth('admin'),
     userController.getAllUsersOverview
+  )
+
+  .get(
+    '/all-customers',
+    auth(USER_ROLE.ADMIN),
+    userController.getAllCustomers
+  )
+
+  .get(
+    '/all-snappers',
+    auth(USER_ROLE.ADMIN),
+    userController.getAllSnappers
+  )
+
+  .get(
+    '/pending-snappers',
+    auth(USER_ROLE.ADMIN),
+    userController.getPendingSnappers
   )
 
   // guardian clicks this link from the verification email, so it must stay unauthenticated

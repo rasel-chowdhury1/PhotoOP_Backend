@@ -17,6 +17,10 @@ import { GalleryRoutes } from "../modules/gallery/gallery.route";
 import { ChatRoutes } from "../modules/chat/chat.route";
 import { messageRoutes } from "../modules/message/message.route";
 import { analyticsRoutes } from "../modules/analytics/analytics.route";
+import { withdrawRequestRoutes } from "../modules/withdrawRequest/withdrawRequest.route";
+import { walletRoutes } from "../modules/wallet/wallet.route";
+import { payoutMethodRoutes } from "../modules/payoutMethod/payoutMethod.route";
+import { ServiceChargeRoutes } from "../modules/serviceCharge/serviceCharge.route";
 
 const router = Router();
 
@@ -88,6 +92,22 @@ const moduleRoutes = [
    {
    path: "/analytics",
    route: analyticsRoutes
+   },
+   {
+   path: "/withdrawals",
+   route: withdrawRequestRoutes
+   },
+   {
+   path: "/wallet",
+   route: walletRoutes
+   },
+   {
+   path: "/payout-methods",
+   route: payoutMethodRoutes
+   },
+      {
+   path: "/service-charge",
+   route: ServiceChargeRoutes
    },
 ];
 

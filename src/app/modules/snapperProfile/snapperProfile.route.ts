@@ -10,6 +10,12 @@ snapperProfileRoutes
   .get("/verified", snapperProfileController.getVerifiedSnappers)
 
   .get(
+    "/storage-usage",
+    auth(USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+    snapperProfileController.getStorageUsage,
+  )
+
+  .get(
     "/availability-packages/:userId",
     auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
     snapperProfileController.getAvailabilityAndPackages,

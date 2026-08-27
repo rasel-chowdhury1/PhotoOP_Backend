@@ -250,10 +250,31 @@ const BookingSchema = new Schema(
     autoAcceptAt: Date,
 
     // =========================
+    // Snapper wallet earnings (see wallet.service.ts) — set exactly once each, the
+    // idempotency gate preventing this booking's earning from being credited or
+    // released more than once
+    // =========================
+    earningsCreditedAt: {
+      type: Date,
+      default: null,
+    },
+
+    earningsReleasedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // =========================
     // Payment (separate from `status` — see PaymentStatus doc comment in
     // booking.interface.ts for how this differs from Payment/payment.interface.ts)
     // =========================
 
+
+    paymentId: {
+      type: Schema.Types.ObjectId,
+      ref: "Payment",
+      default: null,
+    },
     paymentStatus: {
       type: String,
       enum: Object.values(PaymentStatus),
@@ -341,6 +362,14 @@ BookingSchema.index({
 BookingSchema.index({
   status: 1,
   autoAcceptAt: 1,
+});
+
+// for the pending-earnings-release cron's sweep query (see wallet.cron.ts)
+BookingSchema.index({
+  status: 1,
+  paymentStatus: 1,
+  earningsReleasedAt: 1,
+  completedAt: 1,
 });
 
 export default model("Booking", BookingSchema);

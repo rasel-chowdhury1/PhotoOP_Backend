@@ -7,6 +7,9 @@ import createDefaultAdmin from './app/DB/createDefaultAdmin';
 import { initSocketIO } from './socketIo';
 import { logger } from './app/utils/logger';
 import { startAutoAcceptDeliveriesCron, startCleanupOrphanedAssetsCron } from './app/modules/booking/booking.cron';
+import { startDowngradeExpiredPlansCron } from './app/modules/snapperProfile/snapperProfile.cron';
+import { startPurgeExpiredDeliveryAssetsCron } from './app/modules/gallery/gallery.cron';
+import { startReleasePendingEarningsCron } from './app/modules/wallet/wallet.cron';
 
 // Create a new HTTP server
 const socketServer = createServer();
@@ -52,6 +55,15 @@ async function main() {
 
     // daily sweep: delete staged delivery-asset uploads that never got submitted
     startCleanupOrphanedAssetsCron();
+
+    // daily sweep: downgrade snappers whose paid storage plan has expired back to FREE
+    startDowngradeExpiredPlansCron();
+
+    // daily sweep: purge delivery assets older than the owning snapper's retention window
+    startPurgeExpiredDeliveryAssetsCron();
+
+    // hourly sweep: release snapper earnings past their settlement hold into available balance
+    startReleasePendingEarningsCron();
 
 
 

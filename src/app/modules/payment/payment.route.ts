@@ -15,6 +15,12 @@ paymentRoutes.post(
 );
 
 paymentRoutes
+  .post(
+    "/storage-plan/checkout",
+    auth(USER_ROLE.SNAPPER),
+    paymentController.createStoragePlanCheckout
+  )
+
   // customer: only their own payments. snapper: their own direct payments (e.g. storage
   // upgrades) plus the customer payments received against their bookings (their earnings)
   .get(

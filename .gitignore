@@ -67,7 +67,7 @@ venv/
 env/
 .vercel
 .vercel
-# public/
+public/
 
 # Private local storage for uploaded delivery assets (see src/app/utils/storage) —
 # never served by express.static, and not meant to be committed

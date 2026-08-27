@@ -2,11 +2,16 @@ import { Schema, model } from "mongoose";
 
 export enum WithdrawStatus {
   PENDING = "PENDING",
-  APPROVED = "APPROVED",
+  PROCESSING = "PROCESSING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
   REJECTED = "REJECTED",
-  PAID = "PAID",
+  CANCELLED = "CANCELLED",
 }
 
+// kept for the payoutMethod.model.ts reference-type enum's parity, and for any caller
+// still checking a payout method's own type — Withdraw itself no longer stores
+// method/accountDetails inline, it references PayoutMethod via paymentMethodId instead
 export enum WithdrawMethod {
   BANK = "BANK",
   PAYPAL = "PAYPAL",
@@ -26,23 +31,39 @@ const WithdrawSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
 
+    // gross amount requested by the snapper
     amount: {
       type: Number,
       required: true,
       min: 1,
     },
 
-    method: {
-      type: String,
-      enum: Object.values(WithdrawMethod),
+    // platform processing fee, calculated server-side (see config.withdrawal.feePercentage)
+    fee: {
+      type: Number,
       required: true,
+      default: 0,
+      min: 0,
     },
 
-    accountDetails: {
-      type: Schema.Types.Mixed,
+    // amount - fee — what's actually transferred to the snapper
+    netAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    currency: {
+      type: String,
+      default: "USD",
+      uppercase: true,
+    },
+
+    paymentMethodId: {
+      type: Schema.Types.ObjectId,
+      ref: "PayoutMethod",
       required: true,
     },
 
@@ -50,9 +71,9 @@ const WithdrawSchema = new Schema(
       type: String,
       enum: Object.values(WithdrawStatus),
       default: WithdrawStatus.PENDING,
-      index: true,
     },
 
+    // external payout reference (bank/PayPal/Stripe transfer id) — only set on COMPLETED
     transactionId: {
       type: String,
       default: null,
@@ -75,7 +96,16 @@ const WithdrawSchema = new Schema(
       default: null,
     },
 
-    rejectionReason: {
+    // why a PROCESSING withdrawal ended up FAILED
+    failureReason: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    // admin's note — used for REJECTED (why the request was declined) and as a general
+    // freeform annotation on any admin action
+    adminNote: {
       type: String,
       default: null,
       trim: true,
@@ -94,6 +124,8 @@ const WithdrawSchema = new Schema(
 );
 
 WithdrawSchema.index({ snapperId: 1, status: 1 });
-WithdrawSchema.index({ requestedAt: -1 });
+WithdrawSchema.index({ status: 1 });
+WithdrawSchema.index({ createdAt: -1 });
+WithdrawSchema.index({ paymentMethodId: 1 });
 
 export default model("Withdraw", WithdrawSchema);
