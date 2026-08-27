@@ -22,7 +22,7 @@ const client = twilio(accountSid, authToken);
 const login = catchAsync(async (req: Request, res: Response) => {
 
   console.log('login-1')
-  const result = await authServices.login(req.body);
+  const result = await authServices.login(req.body, req);
   console.log('login-2');
   const cookieOptions: any = {
     secure: false,
@@ -34,10 +34,37 @@ const login = catchAsync(async (req: Request, res: Response) => {
     cookieOptions.sameSite = 'none';
   }
 
+  res.cookie('refreshToken', refreshToken, cookieOptions);
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Logged in successfully',
+    data: result,
+  });
+});
+
+// login by google using {email,name,profileImage}
+const googleLogin = catchAsync(async (req: Request, res: Response) => {
+
+  const result = await authServices.googleLogin(req.body, req);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Google logged in successfully',
+    data: result,
+  });
+});
+
+const appleLogin = catchAsync(async (req: Request, res: Response) => {
+
+  const result = await authServices.appleLogin(req.body, req);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Apple logged in successfully',
     data: result,
   });
 });

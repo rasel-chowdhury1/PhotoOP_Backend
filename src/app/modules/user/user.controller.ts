@@ -188,6 +188,17 @@ const getMyBookingOverview = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getMySnapperProfile = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.getMySnapperProfile(req.user.userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Snapper profile retrieved successfully',
+    data: result,
+  });
+});
+
 const deleteMyAccount = catchAsync(async (req: Request, res: Response) => {
   const result = await userService.deleteMyAccount(req.user.userId, req.body);
 
@@ -308,6 +319,7 @@ export const userController = {
   getMyNotificationSettings,
   updateMyNotificationSettings,
   getMyBookingOverview,
+  getMySnapperProfile,
   deleteMyAccount,
   updateUserStatus,
   updateAdminApproval,

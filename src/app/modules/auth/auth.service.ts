@@ -6,11 +6,14 @@ import { otpSendEmail } from '../../utils/emaillNotifiacation';
 import { createToken, verifyToken } from '../../utils/tokenManage';
 import { otpServices } from '../otp/otp.service';
 import { generateOptAndExpireTime } from '../otp/otp.utils';
-import { TUser } from '../user/user.interface';
+import { TUser, UserStatus } from '../user/user.interface';
 import { User } from '../user/user.model';
 import { OTPVerifyAndCreateUserProps } from '../user/user.service';
 import { TLogin } from './auth.interface';
 import { TPurposeType } from '../otp/otp.interface';
+import { Request } from 'express';
+import { Login_With } from '../user/user.constants';
+import { generateAndReturnTokens } from '../user/user.utils';
 
 const twilio = require('twilio');
 
@@ -21,7 +24,7 @@ const twilioPhone = config.twilio_phone_number;
 // Create a Twilio client
 const client = twilio(accountSid, authToken);
 // Login
-const login = async (payload: TLogin) => {
+const login = async (payload: TLogin, req: Request) => {
   console.log('payload', payload);
   const user = await User.isUserActive(payload?.email);
   
@@ -35,11 +38,7 @@ const login = async (payload: TLogin) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password does not match');
   }
 
-  // keep this device's push token current on every successful login
-  if (payload.fcmToken && payload.fcmToken !== user.fcmToken) {
-    await User.findByIdAndUpdate(user._id, { fcmToken: payload.fcmToken });
-    user.fcmToken = payload.fcmToken;
-  }
+
 
   const jwtPayload: {
     userId: string;
@@ -47,13 +46,44 @@ const login = async (payload: TLogin) => {
     fullName?: string;
     email: string;
     phone?: string;
+    profileImage?: string;
+    loginWth?: string
   } = {
+    userId: user?._id?.toString() as string,
+    role: user?.role,
     fullName: user?.fullName,
     email: user.email,
     phone: user.phoneNumber,
-    userId: user?._id?.toString() as string,
-    role: user?.role,
+    profileImage: user?.profileImage,
+    loginWth: user.loginWth
   };
+
+
+    if (user) {
+    const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      '';
+     
+    const userAgent = req.headers['user-agent'] || '';
+    //@ts-ignore
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    const device = {
+      ip: ip,
+      browser: result.browser.name,
+      os: result.os.name,
+      device: result.device.model || 'Desktop',
+      lastLogin: new Date().toISOString(),
+    };
+
+    await User.findByIdAndUpdate(
+      user?._id,
+      { fcmToken: payload.fcmToken, device },
+      { new: true, upsert: false },
+    );
+  }
 
 
   const accessToken = createToken({
@@ -62,7 +92,6 @@ const login = async (payload: TLogin) => {
     expity_time: config.jwt_access_expires_in as string,
   });
 
-  console.log({ accessToken });
 
   const refreshToken = createToken({
     payload: jwtPayload,
@@ -75,6 +104,268 @@ const login = async (payload: TLogin) => {
     accessToken,
     refreshToken,
   };
+};
+
+
+
+const googleLogin = async (payload: { email: string, name: string, profileImage: string, role: string, fcmToken?: string }, req: Request) => {
+  // Check if the user exists
+  let user = await User.isUserExist(payload.email);
+
+  
+
+  if (user) {
+    // Validate user status and permissions
+     if (user.loginWth !== Login_With.google) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          'This account is not registered for Google login',
+        );
+      }
+
+      if (user.isDeleted) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          'This user account has been deleted',
+        );
+      }
+
+      if (
+        user.status === UserStatus.BLOCKED ||
+        user.status === UserStatus.SUSPENDED
+      ) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          'Your account has been blocked or suspended. Please contact support for assistance.',
+        );
+      }
+
+     const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      '';
+     
+    const userAgent = req.headers['user-agent'] || '';
+    //@ts-ignore
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    const device = {
+      ip: ip,
+      browser: result.browser.name,
+      os: result.os.name,
+      device: result.device.model || 'Desktop',
+      lastLogin: new Date().toISOString(),
+    };
+
+    await User.findByIdAndUpdate(
+      user?._id,
+      {  device, },
+      { new: true, upsert: false },
+    );
+
+    return generateAndReturnTokens(user);
+  }
+
+
+try {
+
+  const fullName = payload?.name?.trim() || "";
+
+  const nameParts = fullName.split(" ").filter(Boolean);
+
+  const firstName = nameParts[0] || "";
+  const lastName =
+    nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+
+    // If user does not exist, create a new one
+  user = await User.create({
+    sureName: firstName,
+    lastName,
+    name: payload?.name || "",
+    email: payload.email,
+    password: "testing123",
+    profileImage: payload?.profileImage || "",
+    role: payload.role ,
+    loginWth: Login_With.google,
+  });
+
+
+} catch (error) {
+  console.log({error});
+  return;
+}
+
+ 
+
+   const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      '';
+     
+    const userAgent = req.headers['user-agent'] || '';
+    //@ts-ignore
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    const device = {
+      ip: ip,
+      browser: result.browser.name,
+      os: result.os.name,
+      device: result.device.model || 'Desktop',
+      lastLogin: new Date().toISOString(),
+    };
+
+    await User.findByIdAndUpdate(
+      user?._id,
+      { device },
+      { new: true, upsert: false },
+    );
+
+
+  return generateAndReturnTokens(user);
+};
+
+
+const appleLogin = async (
+  payload: {
+    appleId: string;
+    email?: string;
+    name?: string;
+    role?: string;
+    fcmToken?: string;
+  },
+  req: Request,
+) => {
+
+  // 1️⃣ Find user by appleId (PRIMARY KEY)
+  let user = await User.findOne({ appleId: payload.appleId });
+
+  // 2️⃣ If not found, try email (FIRST LOGIN ONLY)
+  if (!user && payload.email) {
+    user = await User.findOne({ email: payload.email });
+  }
+
+
+  // 3️⃣ Existing user
+  if (user) {
+    if (user.loginWth !== Login_With.apple) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        `This account is not registered for Apple Login`,
+      );
+    }
+
+    if (user.isDeleted) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'This user account has been deleted',
+      );
+    }
+
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.SUSPENDED
+    ) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'This user account has been blocked or suspended',
+      );
+    }
+
+    // 🔗 Attach appleId if missing (important for old users)
+    if (!user.appleId) {
+      user.appleId = payload.appleId;
+      await user.save();
+    }
+
+    const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      '';
+     
+    const userAgent = req.headers['user-agent'] || '';
+    //@ts-ignore
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    const device = {
+      ip: ip,
+      browser: result.browser.name,
+      os: result.os.name,
+      device: result.device.model || 'Desktop',
+      lastLogin: new Date().toISOString(),
+    };
+
+    await User.findByIdAndUpdate(
+      user?._id,
+      { device },
+      { new: true, upsert: false },
+    );
+
+    const appleToken = generateAndReturnTokens(user);
+    return appleToken;
+  }
+
+  // 4️⃣ Create new Apple user (email optional)
+  try {
+    const fullName = payload?.name?.trim() || '';
+    const nameParts = fullName.split(' ').filter(Boolean);
+
+    const firstName = nameParts[0] || '';
+    const lastName =
+      nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+
+    user = await User.create({
+      appleId: payload.appleId,          // ✅ REQUIRED
+      email: payload.email || undefined, // ✅ OPTIONAL
+      sureName: firstName,
+      lastName,
+      name: payload?.name || '',
+      password: 'apple-login-temp-password',
+      profileImage: '',
+      role: payload?.role ,
+      loginWth: Login_With.apple,
+      fcmToken: payload.fcmToken || '',
+    });
+
+
+
+  } catch (error) {
+    console.log({ error });
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Apple login failed',
+    );
+  }
+
+  const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      '';
+     
+    const userAgent = req.headers['user-agent'] || '';
+    //@ts-ignore
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+
+    const device = {
+      ip: ip,
+      browser: result.browser.name,
+      os: result.os.name,
+      device: result.device.model || 'Desktop',
+      lastLogin: new Date().toISOString(),
+    };
+
+    await User.findByIdAndUpdate(
+      user?._id,
+      { device },
+      { new: true, upsert: false },
+    );
+    
+  return generateAndReturnTokens(user);
 };
 
 // forgot Password by email
@@ -316,6 +607,8 @@ const changePassword = async ({
 
   return result;
 };
+
+
 
 // Logout — this app's tokens are stateless JWTs handed back in the response body (not
 // server-tracked sessions/cookies), so there's nothing to invalidate server-side beyond

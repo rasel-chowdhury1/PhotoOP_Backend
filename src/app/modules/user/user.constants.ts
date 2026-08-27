@@ -29,3 +29,10 @@ export const days = [
   'Friday',
   'Saturday',
 ] as const;
+
+export enum Login_With {
+  google = 'google',
+  apple = 'apple',
+  facebook = 'facebook',
+  credentials = 'credentials',
+}

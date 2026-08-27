@@ -17,6 +17,8 @@ import SnapperProfile from '../snapperProfile/snapperProfile.model';
 import Package, { DurationUnit } from '../package/package.model';
 import Booking from '../booking/booking.model';
 import { BookingStatus } from '../booking/booking.interface';
+import { bookingService } from '../booking/booking.service';
+import { walletService } from '../wallet/wallet.service';
 import {
   AdminApprovalStatus,
   DeleteAccountPayload,
@@ -479,7 +481,40 @@ const getMyProfile = async (id: string) => {
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
-  return user;
+
+  // which side of a Booking this user shows up on depends on their role — customers
+  // are Booking.userId, snappers are Booking.snapperId. Admins have neither, so both
+  // counts naturally come back 0 for them.
+  const bookingField = user.role === UserRole.SNAPPER ? 'snapperId' : 'userId';
+  const now = new Date();
+
+  const [totalBookings, completedBookings, upcomingBookings] = await Promise.all([
+    Booking.countDocuments({ [bookingField]: id, isDeleted: false }),
+
+    Booking.countDocuments({
+      [bookingField]: id,
+      isDeleted: false,
+      status: BookingStatus.COMPLETED,
+    }),
+
+    // same "upcoming" definition used by getUserBookingOverview/getSnapperBookingStats:
+    // accepted, with the shoot date still ahead
+    Booking.countDocuments({
+      [bookingField]: id,
+      isDeleted: false,
+      status: BookingStatus.ACCEPTED,
+      bookingDate: { $gte: now },
+    }),
+  ]);
+
+  return {
+    ...user.toObject(),
+    statistics: {
+      totalBookings,
+      completedBookings,
+      upcomingBookings,
+    },
+  };
 };
 
 const getUserById = async (id: string) => {
@@ -643,6 +678,32 @@ const getUserBookingOverview = async (userId: string) => {
     completedBookings,
     upcomingBookings,
     recentBookings,
+  };
+};
+
+// the authenticated snapper's own User + SnapperProfile, plus a quick stats summary.
+// Reuses booking.service.ts's getSnapperBookingStats (totalCompleted, bookingsThisMonth,
+// etc.) and wallet.service.ts's getWalletSummary (totalEarned — the same single source
+// of truth analytics.service.ts's snapper-overview endpoint already uses) rather than
+// re-deriving either from a fresh Booking aggregation here.
+const getMySnapperProfile = async (userId: string) => {
+  const [snapperProfile, bookingStats, wallet] = await Promise.all([
+    SnapperProfile.findOne({ userId }).populate("userId"),
+    bookingService.getSnapperBookingStats(userId),
+    walletService.getWalletSummary(userId),
+  ]);
+
+  if (!snapperProfile) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Snapper profile not found');
+  }
+
+  return {
+    snapperProfile,
+    statistics: {
+      totalCompletedBookings: bookingStats.totalCompleted,
+      totalEarnings: wallet.totalEarned,
+      totalBookingsThisMonth: bookingStats.bookingsThisMonth,
+    },
   };
 };
 
@@ -988,6 +1049,7 @@ export const userService = {
   getMyNotificationSettings,
   updateMyNotificationSettings,
   getUserBookingOverview,
+  getMySnapperProfile,
   deleteMyAccount,
   updateUserStatus,
   updateAdminApproval,

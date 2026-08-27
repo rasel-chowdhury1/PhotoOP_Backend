@@ -250,7 +250,6 @@ const getMonthlyUserOverview = async (
     count: countByMonth.get(index + 1) ?? 0,
   }));
 
-  console.log({year, role,months})
 
   return { year, role, months };
 };

@@ -15,6 +15,17 @@ authRoutes
     authControllers.logout,
   )
 
+
+    .post(
+    '/google-login', 
+    authControllers.googleLogin
+  )
+
+  .post(
+    '/apple-login', 
+    authControllers.appleLogin
+  )
+  
   .post(
     '/refresh-token',
     validateRequest(authValidation.refreshTokenValidationSchema),

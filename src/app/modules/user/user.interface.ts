@@ -89,6 +89,7 @@ export interface ILocation {
 export interface TUserCreate {
   fullName: string;
   email: string;
+  appleId?: string; // Apple unique user id
   password: string;
   role: UserRole;
 
@@ -107,6 +108,7 @@ export interface TUserCreate {
   about?: string;
   phoneNumber?: string;
   address?: string;
+  loginWth: 'google' | 'apple' | 'facebook' | 'credentials';
   location?: ILocation;
   socialLinks?: Partial<TSocialLinks>;
 
@@ -124,6 +126,13 @@ export interface TUserCreate {
   approvalHistory?: IApprovalHistoryEntry[];
 
   isDeleted?: boolean;
+  device: {
+    ip: string;
+    browser: string;
+    os: string;
+    device: string;
+    lastLogin: string;
+  };
 }
 
 export interface TUser extends TUserCreate {

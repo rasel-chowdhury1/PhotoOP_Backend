@@ -9,6 +9,7 @@ import {
   UserRole,
   UserStatus,
 } from "./user.interface";
+import { Login_With } from "./user.constants";
 
 const ApprovalHistorySchema = new Schema(
   {
@@ -153,6 +154,12 @@ const UserSchema = new Schema<TUser, UserModel>(
       lowercase: true,
     },
 
+    appleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     password: {
       type: String,
       required: true,
@@ -211,6 +218,11 @@ const UserSchema = new Schema<TUser, UserModel>(
       default: ""
     },
 
+    loginWth: {
+      type: String,
+      enum: Login_With,
+      default: Login_With.credentials,
+    },
     // this device's push token, kept current on every successful login (see auth.service.ts)
     fcmToken: {
       type: String,
@@ -277,6 +289,24 @@ const UserSchema = new Schema<TUser, UserModel>(
     isDeleted: {
       type: Boolean,
       default: false,
+    },
+
+    device: {
+      ip: {
+        type: String,
+      },
+      browser: {
+        type: String,
+      },
+      os: {
+        type: String,
+      },
+      device: {
+        type: String,
+      },
+      lastLogin: {
+        type: String,
+      },
     },
   },
   {

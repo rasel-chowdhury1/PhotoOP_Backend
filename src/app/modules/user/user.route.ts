@@ -96,6 +96,12 @@ userRoutes
     userController.getMyBookingOverview,
   )
 
+  .get(
+    '/my-snapper-profile',
+    auth(USER_ROLE.SNAPPER),
+    userController.getMySnapperProfile,
+  )
+
 
 
   .get(
