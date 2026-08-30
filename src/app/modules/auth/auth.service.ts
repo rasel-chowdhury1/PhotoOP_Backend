@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import mongoose from 'mongoose';
 import httpStatus from 'http-status';
 import config from '../../config';
 import AppError from '../../error/AppError';
@@ -6,14 +7,17 @@ import { otpSendEmail } from '../../utils/emaillNotifiacation';
 import { createToken, verifyToken } from '../../utils/tokenManage';
 import { otpServices } from '../otp/otp.service';
 import { generateOptAndExpireTime } from '../otp/otp.utils';
-import { TUser, UserStatus } from '../user/user.interface';
+import { TGuardian, TUser, UserRole, UserStatus } from '../user/user.interface';
 import { User } from '../user/user.model';
-import { OTPVerifyAndCreateUserProps } from '../user/user.service';
+import SnapperProfile from '../snapperProfile/snapperProfile.model';
+import { OTPVerifyAndCreateUserProps, userService } from '../user/user.service';
 import { TLogin } from './auth.interface';
 import { TPurposeType } from '../otp/otp.interface';
 import { Request } from 'express';
 import { Login_With } from '../user/user.constants';
 import { generateAndReturnTokens } from '../user/user.utils';
+import UAParser from 'ua-parser-js';
+import sendResponse from '../../utils/sendResponse';
 
 const twilio = require('twilio');
 
@@ -28,7 +32,7 @@ const login = async (payload: TLogin, req: Request) => {
   console.log('payload', payload);
   const user = await User.isUserActive(payload?.email);
   
-
+console.log("user login in here =>> ", user);
   
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found');
@@ -108,11 +112,16 @@ const login = async (payload: TLogin, req: Request) => {
 
 
 
-const googleLogin = async (payload: { email: string, name: string, profileImage: string, role: string, fcmToken?: string }, req: Request) => {
+const googleLogin = async (payload: { email: string, name: string, profileImage: string, role: string, fcmToken?: string, type?: 'signIn' | 'signUp' }, req: Request) => {
   // Check if the user exists
   let user = await User.isUserExist(payload.email);
 
-  
+  if (!user && payload.type === 'signIn') {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'No account found with this Google account. Please sign up first.',
+    );
+  }
 
   if (user) {
     // Validate user status and permissions
@@ -160,7 +169,7 @@ const googleLogin = async (payload: { email: string, name: string, profileImage:
 
     await User.findByIdAndUpdate(
       user?._id,
-      {  device, },
+      {  device, fcmToken: payload.fcmToken },
       { new: true, upsert: false },
     );
 
@@ -219,7 +228,7 @@ try {
 
     await User.findByIdAndUpdate(
       user?._id,
-      { device },
+      { device, fcmToken: payload.fcmToken },
       { new: true, upsert: false },
     );
 
@@ -235,18 +244,29 @@ const appleLogin = async (
     name?: string;
     role?: string;
     fcmToken?: string;
+    type?: 'signIn' | 'signUp';
   },
   req: Request,
 ) => {
 
+  console.log("Payload of Apple Login ===>>> ", payload)
+
   // 1️⃣ Find user by appleId (PRIMARY KEY)
   let user = await User.findOne({ appleId: payload.appleId });
+
+  console.log("user of apple =>>> ", user)
 
   // 2️⃣ If not found, try email (FIRST LOGIN ONLY)
   if (!user && payload.email) {
     user = await User.findOne({ email: payload.email });
   }
 
+  if (!user && payload.type === 'signIn') {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'No account found with this Apple account. Please sign up first.',
+    );
+  }
 
   // 3️⃣ Existing user
   if (user) {
@@ -300,7 +320,7 @@ const appleLogin = async (
 
     await User.findByIdAndUpdate(
       user?._id,
-      { device },
+      { device, fcmToken: payload.fcmToken },
       { new: true, upsert: false },
     );
 
@@ -361,10 +381,231 @@ const appleLogin = async (
 
     await User.findByIdAndUpdate(
       user?._id,
-      { device },
+      { device, fcmToken: payload.fcmToken },
       { new: true, upsert: false },
     );
     
+  return generateAndReturnTokens(user);
+};
+
+// Google sign up for Snapper accounts — unlike googleLogin (which silently creates a
+// bare account for any role on first contact), a Snapper account additionally needs a
+// SnapperProfile (identityImage + hourlyRate are required by that schema), so this is a
+// deliberate, dedicated sign-up call rather than something googleLogin can fall through to.
+const googleSignupSnapper = async (
+  payload: {
+    email: string;
+    name?: string;
+    profileImage?: string;
+    fcmToken?: string;
+    dateOfBirth?: Date | string;
+    countryCode?: string;
+    phoneNumber?: string;
+    address?: string;
+    guardian?: Partial<TGuardian>;
+    identityImage: string;
+    hourlyRate: number;
+    specialties?: string[];
+    badges?: string[];
+    about?: string;
+  },
+  req: Request,
+) => {
+  const existingUser = await User.isUserExist(payload.email);
+
+  if (existingUser) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      'An account already exists with this email. Please sign in instead.',
+    );
+  }
+
+  if (!payload.identityImage || payload.hourlyRate === undefined) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'identityImage and hourlyRate are required for snapper accounts',
+    );
+  }
+
+  const session = await mongoose.startSession();
+  let user;
+
+  try {
+    session.startTransaction();
+
+    const [createdUser] = await User.create(
+      [
+        {
+          email: payload.email,
+          fullName: payload?.name || '',
+          profileImage: payload?.profileImage || '',
+          password: 'oauth-google-temp-password',
+          role: UserRole.SNAPPER,
+          loginWth: Login_With.google,
+          dateOfBirth: payload.dateOfBirth,
+          countryCode: payload.countryCode,
+          phoneNumber: payload.phoneNumber,
+          address: payload.address,
+          guardian: payload.guardian,
+          fcmToken: payload.fcmToken,
+        },
+      ],
+      { session },
+    );
+
+    if (!createdUser) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
+    }
+
+    user = createdUser;
+
+    const [snapperProfile] = await SnapperProfile.create(
+      [
+        {
+          userId: user._id,
+          identityImage: payload.identityImage,
+          hourlyRate: payload.hourlyRate,
+          specialties: payload.specialties,
+          badges: payload.badges,
+          about: payload.about,
+        },
+      ],
+      { session },
+    );
+
+    user = await User.findByIdAndUpdate(
+      user._id,
+      { snapperId: snapperProfile._id },
+      { new: true, session },
+    );
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+
+  if (!user) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
+  }
+
+  userService.notifyAdminOfNewUser(user);
+  userService.triggerGuardianVerificationIfNeeded(user);
+
+  return generateAndReturnTokens(user);
+};
+
+// Apple sign up for Snapper accounts — same rationale as googleSignupSnapper, keyed on
+// appleId (Apple's stable identifier) instead of email, since Apple lets a user hide
+// their real email behind a relay address.
+const appleSignupSnapper = async (
+  payload: {
+    appleId: string;
+    email?: string;
+    name?: string;
+    fcmToken?: string;
+    dateOfBirth?: Date | string;
+    countryCode?: string;
+    phoneNumber?: string;
+    address?: string;
+    guardian?: Partial<TGuardian>;
+    identityImage: string;
+    hourlyRate: number;
+    specialties?: string[];
+    badges?: string[];
+    about?: string;
+  },
+  req: Request,
+) => {
+  let existingUser = await User.findOne({ appleId: payload.appleId });
+
+  if (!existingUser && payload.email) {
+    existingUser = await User.findOne({ email: payload.email });
+  }
+
+  if (existingUser) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      'An account already exists with this Apple account. Please sign in instead.',
+    );
+  }
+
+  if (!payload.identityImage || payload.hourlyRate === undefined) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'identityImage and hourlyRate are required for snapper accounts',
+    );
+  }
+
+  const session = await mongoose.startSession();
+  let user;
+
+  try {
+    session.startTransaction();
+
+    const [createdUser] = await User.create(
+      [
+        {
+          appleId: payload.appleId,
+          email: payload.email || undefined,
+          fullName: payload?.name || '',
+          password: 'oauth-apple-temp-password',
+          role: UserRole.SNAPPER,
+          loginWth: Login_With.apple,
+          dateOfBirth: payload.dateOfBirth,
+          countryCode: payload.countryCode,
+          phoneNumber: payload.phoneNumber,
+          address: payload.address,
+          guardian: payload.guardian,
+          fcmToken: payload.fcmToken,
+        },
+      ],
+      { session },
+    );
+
+    if (!createdUser) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
+    }
+
+    user = createdUser;
+
+    const [snapperProfile] = await SnapperProfile.create(
+      [
+        {
+          userId: user._id,
+          identityImage: payload.identityImage,
+          hourlyRate: payload.hourlyRate,
+          specialties: payload.specialties,
+          badges: payload.badges,
+          about: payload.about,
+        },
+      ],
+      { session },
+    );
+
+    user = await User.findByIdAndUpdate(
+      user._id,
+      { snapperId: snapperProfile._id },
+      { new: true, session },
+    );
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+
+  if (!user) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
+  }
+
+  userService.notifyAdminOfNewUser(user);
+  userService.triggerGuardianVerificationIfNeeded(user);
+
   return generateAndReturnTokens(user);
 };
 
@@ -674,6 +915,10 @@ const refreshToken = async (token: string) => {
 
 export const authServices = {
   login,
+  googleLogin,
+  appleLogin,
+  googleSignupSnapper,
+  appleSignupSnapper,
   logout,
   forgotPasswordOtpMatch,
   changePassword,

@@ -143,14 +143,14 @@ const UserSchema = new Schema<TUser, UserModel>(
   {
     fullName: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
     },
 
     email: {
       type: String,
       unique: true,
-      required: true,
+      required: false,
       lowercase: true,
     },
 
@@ -353,10 +353,9 @@ UserSchema.statics.isUserExist = async function (email: string) {
 };
 
 UserSchema.statics.isUserActive = async function (email: string) {
-  return await User.findOne({
-    email,
-    status: UserStatus.ACTIVE,
-  }).select("+password");
+
+  const result = await User.findOne({email: email, status: 'active'}).select("+password");
+  return result;
 };
 
 UserSchema.statics.IsUserExistById = async function (id: string) {

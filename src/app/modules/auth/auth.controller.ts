@@ -69,6 +69,32 @@ const appleLogin = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// google sign up for a Snapper account (creates User + SnapperProfile together)
+const googleSignupSnapper = catchAsync(async (req: Request, res: Response) => {
+
+  const result = await authServices.googleSignupSnapper(req.body, req);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Snapper account created successfully with Google',
+    data: result,
+  });
+});
+
+// apple sign up for a Snapper account (creates User + SnapperProfile together)
+const appleSignupSnapper = catchAsync(async (req: Request, res: Response) => {
+
+  const result = await authServices.appleSignupSnapper(req.body, req);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Snapper account created successfully with Apple',
+    data: result,
+  });
+});
+
 // logout
 const logout = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.user;
@@ -174,6 +200,10 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
 
 export const authControllers = {
   login,
+  googleLogin,
+  appleLogin,
+  googleSignupSnapper,
+  appleSignupSnapper,
   logout,
   changePassword,
   forgotPassword,

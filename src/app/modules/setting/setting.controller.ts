@@ -6,7 +6,8 @@ import { settingsService } from "./settting.service";
 // Get the privacy policy
 const getPrivacyPolicy = async (req: Request, res: Response) => {
     try {
-        const policy = await settingsService.getSettingsByKey({key: "privacy_policy"});
+        const role = req.params.role as 'user' | 'snapper';
+        const policy = await settingsService.getSettingsByKey({key: "privacy_policy", role});
 
         sendResponse(res, {
             statusCode: httpStatus.OK,
@@ -28,7 +29,8 @@ const getPrivacyPolicy = async (req: Request, res: Response) => {
 // Get the term conditions
 const getTermConditions = async (req: Request, res: Response) => {
     try {
-        const policy = await settingsService.getSettingsByKey({key: "term_condition"});
+        const role = req.params.role as 'user' | 'snapper';
+        const policy = await settingsService.getSettingsByKey({key: "term_condition", role});
 
         sendResponse(res, {
             statusCode: httpStatus.OK,
@@ -50,7 +52,8 @@ const getTermConditions = async (req: Request, res: Response) => {
 // Get the term conditions
 const getAboutUs = async (req: Request, res: Response) => {
     try {
-        const policy = await settingsService.getSettingsByKey({key: "about_us"});
+        const role = req.params.role as 'user' | 'snapper';
+        const policy = await settingsService.getSettingsByKey({key: "about_us", role});
 
         sendResponse(res, {
             statusCode: httpStatus.OK,
@@ -72,8 +75,8 @@ const getAboutUs = async (req: Request, res: Response) => {
 // Update the privacy policy
 const updateSettingsByKey = async (req: Request, res: Response) => {
     try {
-        const { key, content } = req.body;
-        const updatedPolicy = await settingsService.updateSettingsByKey(key, content);
+        const { key, role, content } = req.body;
+        const updatedPolicy = await settingsService.updateSettingsByKey(key, role, content);
 
         sendResponse(res, {
             statusCode: httpStatus.OK,

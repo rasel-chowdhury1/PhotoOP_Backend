@@ -3,6 +3,13 @@ import { authControllers } from './auth.controller';
 import auth from '../../middleware/auth';
 import validateRequest from '../../middleware/validateRequest';
 import { authValidation } from './auth.validation';
+import fileUpload from '../../middleware/fileUpload';
+import parseData from '../../middleware/parseData';
+import { userController } from '../user/user.controller';
+
+const upload = fileUpload('./public/uploads/profile');
+
+
 
 export const authRoutes = Router();
 
@@ -22,10 +29,26 @@ authRoutes
   )
 
   .post(
-    '/apple-login', 
+    '/apple-login',
     authControllers.appleLogin
   )
-  
+
+  .post(
+    '/google-signup-snapper',
+    upload.fields([{ name: 'identityImage', maxCount: 1 }]),
+    parseData(),
+    userController.attachSignupFiles,
+    authControllers.googleSignupSnapper,
+  )
+
+  .post(
+    '/apple-signup-snapper',
+    upload.fields([{ name: 'identityImage', maxCount: 1 }]),
+    parseData(),
+    userController.attachSignupFiles,
+    authControllers.appleSignupSnapper,
+  )
+
   .post(
     '/refresh-token',
     validateRequest(authValidation.refreshTokenValidationSchema),

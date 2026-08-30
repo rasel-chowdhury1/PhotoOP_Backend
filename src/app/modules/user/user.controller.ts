@@ -145,7 +145,31 @@ const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
     }
   }
 
+
+
   const result = await userService.updateMyProfile(req.user.userId, req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Profile updated successfully',
+    data: result,
+  });
+});
+
+const updateAdminProfile = catchAsync(async (req: Request, res: Response) => {
+  if (req?.files && !Array.isArray(req.files)) {
+    if (req.files.profileImage?.[0]) {
+      req.body.profileImage = storeFile('profile', req.files.profileImage[0].filename);
+    }
+    if (req.files.coverPhoto?.[0]) {
+      req.body.coverPhoto = storeFile('profile', req.files.coverPhoto[0].filename);
+    }
+  }
+
+  console.log(req.user.userId, req.body)
+
+  const result = await userService.updateAdminProfile(req.user.userId, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -316,6 +340,7 @@ export const userController = {
   getAllUsersOverview,
   getMyFavoriteUsers,
   updateMyProfile,
+  updateAdminProfile,
   getMyNotificationSettings,
   updateMyNotificationSettings,
   getMyBookingOverview,

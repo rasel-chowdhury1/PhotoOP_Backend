@@ -7,10 +7,11 @@ import { faqValidation } from "./faq.validation";
 export const faqRoutes = Router();
 
 faqRoutes
-  // Public route to get all active FAQs
-  .get("/", faqController.getActiveFaqs)
+  // Public route to get active FAQs for a given role (user | snapper)
+  .get("/admin/role/:role", faqController.getFaqsByAdmin)
+  .get("/role/:role", faqController.getActiveFaqs)
 
-  // Admin route to get all FAQs (active and inactive)
+  // Admin route to get all FAQs (active and inactive, any role)
   .get("/all", auth("admin"), faqController.getAllFaqs)
 
   .get("/:id", faqController.getFaqById)

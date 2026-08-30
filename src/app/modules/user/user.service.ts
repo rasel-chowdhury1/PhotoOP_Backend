@@ -194,6 +194,41 @@ const verifyGuardianEmail = async (
   return user;
 };
 
+// notifies the platform admin that a new account was created — a snapper-verification
+// request for snappers (surfaced in the pending-snappers admin queue), a plain
+// join notice otherwise. Shared by the OTP signup flow and the Google/Apple snapper
+// signup flow (see auth.service.ts's googleSignupSnapper/appleSignupSnapper).
+const notifyAdminOfNewUser = (user: TUser) => {
+  const admin = getAdminData();
+  if (!admin) {
+    return;
+  }
+
+  const notificationType =
+    user.role === UserRole.SNAPPER
+      ? NotificationType.SNAPPER_VERIFICATION_REQUEST
+      : NotificationType.USER_JOINED;
+
+  const notificationText =
+    user.role === UserRole.SNAPPER
+      ? `${user.fullName} has created a new Snapper account and is waiting for verification.`
+      : `${user.fullName} has joined the platform.`;
+
+  emitNotification({
+    userId: user._id,
+    receiverId: (admin as any)._id,
+    userMsg: {
+      fullName: user.fullName,
+      image: '',
+      text: notificationText,
+      photos: [],
+    },
+    type: notificationType,
+  }).catch((error) => {
+    console.error('Failed to emit notification:', error);
+  });
+};
+
 const triggerGuardianVerificationIfNeeded = (user: TUser) => {
   // don't re-fire on a deliberate REJECTED decision, only when still undecided
   const isPending =
@@ -427,35 +462,7 @@ const otpVerifyAndCreateUser = async ({ otp, token }: OTPVerifyAndCreateUserProp
     throw new AppError(httpStatus.BAD_REQUEST, 'User creation failed');
   }
 
-  if (user) {
-      const admin = getAdminData();
-
-      if (admin) {
-        const notificationType =
-          role === UserRole.SNAPPER
-            ? NotificationType.SNAPPER_VERIFICATION_REQUEST
-            : NotificationType.USER_JOINED;
-
-        const notificationText =
-          role === UserRole.SNAPPER
-            ? `${user.fullName} has created a new Snapper account and is waiting for verification.`
-            : `${user.fullName} has joined the platform.`;
-
-        emitNotification({
-          userId: user._id ,
-          receiverId: (admin as any)._id ,
-          userMsg: {
-            fullName: user.fullName,
-            image: '',
-            text: notificationText,
-            photos: [],
-          },
-          type: notificationType,
-        }).catch((error) => {
-          console.error('Failed to emit notification:', error);
-        });
-      }
-    }
+  notifyAdminOfNewUser(user);
 
   const jwtPayload: { userId: string; role: string; email: string } = {
     email: user.email,
@@ -593,6 +600,61 @@ const updateMyProfile = async (id: string, payload: Partial<TUserCreate>) => {
 
   return user;
 };
+
+const updateAdminProfile = async(id: string, payload: any) => {
+
+    const {
+    role,
+    email,
+    password,
+    isDeleted,
+    status,
+    ...rest
+  } = payload;
+  const existingUser = await User.findById(id);
+  if (!existingUser) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const user = await User.findByIdAndUpdate(id, rest, { new: true, runValidators: true });
+  if (!user) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User updating failed');
+  }
+
+  
+  const jwtPayload: {
+    userId: string;
+    role: string;
+    fullName?: string;
+    email: string;
+    phone?: string;
+    profileImage?: string;
+    loginWth?: string
+  } = {
+    userId: user?._id?.toString() as string,
+    role: user?.role,
+    fullName: user?.fullName,
+    email: user.email,
+    phone: user.phoneNumber,
+    profileImage: user?.profileImage,
+    loginWth: user.loginWth
+  };
+
+  const accessToken = createToken({
+    payload: jwtPayload,
+    access_secret: config.jwt_access_secret as string,
+    expity_time: config.jwt_access_expires_in as string,
+  });
+
+
+  const refreshToken = createToken({
+    payload: jwtPayload,
+    access_secret: config.jwt_refresh_secret as string,
+    expity_time: config.jwt_refresh_expires_in as string,
+  });
+
+  return {user,accessToken,refreshToken}
+}
 
 const getMyNotificationSettings = async (userId: string) => {
   const user = await User.findById(userId).select('notificationSettings');
@@ -1046,6 +1108,7 @@ export const userService = {
   getUserById,
   getUserByEmail,
   updateMyProfile,
+  updateAdminProfile,
   getMyNotificationSettings,
   updateMyNotificationSettings,
   getUserBookingOverview,
@@ -1055,6 +1118,8 @@ export const userService = {
   updateAdminApproval,
   sendGuardianVerificationEmail,
   verifyGuardianEmail,
+  triggerGuardianVerificationIfNeeded,
+  notifyAdminOfNewUser,
   getAllUserQuery,
   getAllUserCount,
   getAllCustomers,

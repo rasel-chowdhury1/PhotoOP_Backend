@@ -13,9 +13,11 @@ const faqSchema = new Schema<IFaq>(
       required: true,
       trim: true,
     },
-    order: {
-      type: Number,
-      default: 0,
+    role: {
+      type: String,
+      enum: ['user', 'snapper'],
+      required: true,
+      index: true,
     },
     isActive: {
       type: Boolean,

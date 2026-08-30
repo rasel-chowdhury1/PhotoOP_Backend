@@ -123,6 +123,18 @@ userRoutes
   )
 
   .patch(
+    '/admin/update-my-profile',
+    auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),
+    upload.fields([
+      { name: 'profileImage', maxCount: 1 },
+      { name: 'coverPhoto', maxCount: 1 },
+    ]),
+    parseData(),
+    validateRequest(userValidation.updateMyProfileValidationSchema),
+    userController.updateAdminProfile,
+  )
+
+  .patch(
     '/status/:id',
     auth(USER_ROLE.ADMIN),
     validateRequest(userValidation.updateUserStatusValidationSchema),

@@ -22,8 +22,21 @@ const getAllFaqs = async (query: Record<string, unknown>) => {
   return { meta, result };
 };
 
-const getActiveFaqs = async (query: Record<string, unknown>) => {
-  const faqQuery = new QueryBuilder(Faq.find({ isActive: true }), query)
+const getActiveFaqs = async (role: "user" | "snapper", query: Record<string, unknown>,) => {
+  const faqQuery = new QueryBuilder(Faq.find({ isActive: true, role }), query)
+    .search(["question", "answer"])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const result = await faqQuery.modelQuery;
+  const meta = await faqQuery.countTotal();
+  return { meta, result };
+};
+
+const getFaqsByAdmin = async (role: "user" | "snapper", query: Record<string, unknown>,) => {
+  const faqQuery = new QueryBuilder(Faq.find({  role }), query)
     .search(["question", "answer"])
     .filter()
     .sort()
@@ -62,6 +75,7 @@ const deleteFaq = async (id: string) => {
 export const faqService = {
   createFaq,
   getAllFaqs,
+  getFaqsByAdmin,
   getActiveFaqs,
   getFaqById,
   updateFaq,

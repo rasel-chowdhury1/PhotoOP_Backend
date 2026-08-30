@@ -1,6 +1,6 @@
 export interface IFaq {
   question: string;
   answer: string;
-  order?: number;
+  role: 'user' | 'snapper';
   isActive?: boolean;
 }
