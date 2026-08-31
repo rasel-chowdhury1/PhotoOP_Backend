@@ -32,7 +32,7 @@ const login = async (payload: TLogin, req: Request) => {
   console.log('payload', payload);
   const user = await User.isUserActive(payload?.email);
   
-console.log("user login in here =>> ", user);
+
   
   if (!user) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found');

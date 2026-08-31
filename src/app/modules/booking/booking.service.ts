@@ -137,6 +137,8 @@ const triggerRefund = (booking: InstanceType<typeof Booking>) => {
 };
 
 const createBooking = async (payload: ICreateBookingPayload, customerUserId: string) => {
+
+  console.log("create bookng payload =>>> ", payload)
   const pkg = await Package.findOne({ _id: payload.packageId, isDeleted: false, isActive: true });
   if (!pkg) {
     throw new AppError(httpStatus.NOT_FOUND, "Package not found or is no longer available");
@@ -227,7 +229,8 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
 
   const preferredDeliveryMethod = payload.deliveryMethod || DELIVERY_METHODS.IN_APP_GALLERY;
 
-  console.log({payload, preferredDeliveryMethod})
+  console.log("booking payload =>>>> ", payload)
+
   const booking = await Booking.create({
     bookingId: generateBookingId(),
     userId: customerUserId,
@@ -248,9 +251,12 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
     serviceFee,
     totalPrice,
     preferredDeliveryMethod,
+    qrCodeFromSnapper: payload.qrCodeFromSnapper || false,
     status: BookingStatus.PENDING,
     statusHistory: [{ status: BookingStatus.PENDING, actionBy: customerUserId, actionAt: new Date() }],
   });
+
+  console.log("after booked =>>> ", booking)
 
   // if Stripe checkout creation fails (misconfigured/unreachable), roll the booking back
   // rather than leaving an unpayable booking sitting in the DB holding the time slot

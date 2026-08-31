@@ -89,7 +89,7 @@ const updateOtpByEmail = async (
   email: string,
   payload: Record<string, any>,
 ) => {
-  console.log(payload);
+
   const otpUpdate = await Otp.findOneAndUpdate(
     {
       sentTo: email,

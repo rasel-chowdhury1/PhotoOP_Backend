@@ -17,10 +17,11 @@ import moment from 'moment-timezone';
 import { ChatService } from "./app/modules/chat/chat.service";
 import { NotificationType } from "./app/modules/notifications/notifications.interface";
 import { isPushAllowed } from "./app/modules/notifications/notifications.utils";
+import { sendNotificationByFcmToken } from "./app/utils/sentNotificationByFcmToken";
 
 
 // Define the socket server port
-const socketPort: number = parseInt(process.env.SOCKET_PORT || "9020", 10);
+const socketPort: number = parseInt(process.env.SOCKET_PORT || "7020", 10);
 
 const app: Application = express();
 
@@ -482,8 +483,11 @@ export const emitNotification = async ({
    const result = await Notification.create(newNotification);
    console.log({result})
 
+  // Send a push notification via FCM when push is allowed
+  if (pushAllowed) {
+    sendNotificationByFcmToken(receiverId, userMsg?.text || "", userMsg?.fullName);
+  }
 
- 
 };
 
 export const emitMessage = async(userId: string) =>{

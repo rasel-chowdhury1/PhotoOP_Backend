@@ -107,6 +107,7 @@ export interface ICreateBookingPayload {
   // the customer's preference at booking time — the snapper's actual delivery method
   // for a given attempt lives on the Delivery doc (see delivery.interface.ts)
   deliveryMethod?: DELIVERY_METHODS;
+  qrCodeFromSnapper?: boolean;
 }
 
 export interface IBooking {
