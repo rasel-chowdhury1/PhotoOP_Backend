@@ -69,6 +69,9 @@ env/
 .vercel
 public/
 
+# Firebase Admin SDK credentials
+googleFirebaseAdmin.json
+
 # Private local storage for uploaded delivery assets (see src/app/utils/storage) —
 # never served by express.static, and not meant to be committed
 /uploads/
