@@ -20,6 +20,8 @@ const stripeWebhook = catchAsync(async (req: Request, res: Response) => {
 
 const createStoragePlanCheckout = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.user;
+
+  console.log("create checkout session for storage plan =>>> ", req.body);
   const { plan, durationMonths } = req.body;
   const result = await paymentService.createCheckoutSessionForStoragePlan(
     userId,

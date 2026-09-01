@@ -5,11 +5,15 @@ import Withdraw from "../withdrawRequest/withdrawRequest.model";
 import { User } from "../user/user.model";
 import { AdminApprovalStatus, UserRole } from "../user/user.interface";
 import Payment from "../payment/payment.model";
+// aliased — booking.interface's PaymentStatus (PENDING/PAID/...) is already imported
+// above under the same name and describes a completely different field (Booking.paymentStatus)
+import { PaymentStatus as PaymentDocStatus, PaymentType } from "../payment/payment.interface";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { walletService } from "../wallet/wallet.service";
 import {
   IAdminEarningPayment,
   IAdminLifetimeEarnings,
+  IAdminStoragePayment,
   IAdminOverview,
   IDailyRevenue,
   IMonthlyBookingEarning,
@@ -168,14 +172,27 @@ const PLATFORM_EARNED_BOOKING_MATCH = {
 };
 
 const getAdminOverview = async (): Promise<IAdminOverview> => {
-  const [totalUsers, totalSnappers, activeBookings, revenueAggregate, pendingApproval, recentUsers] =
-    await Promise.all([
+  const [
+    totalUsers,
+    totalSnappers,
+    activeBookings,
+    revenueAggregate,
+    storageRevenueAggregate,
+    pendingApproval,
+    recentUsers,
+  ] = await Promise.all([
       User.countDocuments({ role: UserRole.USER }),
       User.countDocuments({ role: UserRole.SNAPPER }),
       Booking.countDocuments({ isDeleted: false, status: { $in: ACTIVE_BOOKING_STATUSES } }),
       Booking.aggregate([
         { $match: PLATFORM_EARNED_BOOKING_MATCH },
         { $group: { _id: null, total: { $sum: "$totalPrice" } } },
+      ]),
+      // storage-plan upgrades never touch a Booking, but they're still real
+      // snapper-to-platform revenue — see the same aggregation in getAdminLifetimeEarnings
+      Payment.aggregate([
+        { $match: { paymentType: PaymentType.STORAGE_UPGRADE, status: PaymentDocStatus.SUCCEEDED } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
       User.countDocuments({ role: UserRole.SNAPPER, adminApproval: AdminApprovalStatus.PENDING }),
       User.find({role: {$ne: "admin"}})
@@ -184,11 +201,20 @@ const getAdminOverview = async (): Promise<IAdminOverview> => {
         .select("fullName email role profileImage status adminApproval createdAt"),
     ]);
 
+  const bookingRevenue = revenueAggregate[0]?.total ?? 0;
+  const storageRevenue = storageRevenueAggregate[0]?.total ?? 0;
+
+  const paymenStroange = await Payment.find({ paymentType: PaymentType.STORAGE_UPGRADE, status: PaymentDocStatus.SUCCEEDED });
+
+  console.log("paymeent Stroage =>>> ", paymenStroange)
+
   return {
     totalUsers,
     totalSnappers,
     activeBookings,
-    totalRevenue: revenueAggregate[0]?.total ?? 0,
+    totalRevenue: bookingRevenue + storageRevenue,
+    bookingRevenue,
+    storageRevenue,
     pendingApproval,
     recentUsers: recentUsers as unknown as IAdminOverview["recentUsers"],
   };
@@ -343,6 +369,38 @@ const buildLifetimeEarningsMatch = async (query: Record<string, unknown>) => {
   return match;
 };
 
+// storage-plan upgrades are a snapper-to-platform payment with no booking behind it, so
+// they're matched directly against Payment rather than folded into buildLifetimeEarningsMatch.
+// Reuses the same snapperId/from-to/searchTerm query params as the booking match above —
+// "from/to" here means paidAt (there's no completedAt on a Payment), and searchTerm only
+// has a transactionId to match against (no customer/snapper name snapshot to search)
+const buildStoragePaymentsMatch = (query: Record<string, unknown>) => {
+  const match: Record<string, unknown> = {
+    paymentType: PaymentType.STORAGE_UPGRADE,
+    status: PaymentDocStatus.SUCCEEDED,
+  };
+
+  if (query.snapperId) {
+    match.userId = new Types.ObjectId(query.snapperId as string);
+  }
+
+  const from = query.from ? new Date(query.from as string) : undefined;
+  const to = query.to ? new Date(query.to as string) : undefined;
+  if (from || to) {
+    match.paidAt = {
+      ...(from ? { $gte: from } : {}),
+      ...(to ? { $lte: to } : {}),
+    };
+  }
+
+  const searchTerm = query.searchTerm as string | undefined;
+  if (searchTerm) {
+    match.transactionId = { $regex: searchTerm, $options: "i" };
+  }
+
+  return match;
+};
+
 // all-time platform earnings — the lifetime counterpart to getEarningOverviewByYear,
 // reusing the same PLATFORM_EARNED_BOOKING_MATCH definition of "completed and paid" so
 // the two can never disagree. Returns the totals AND the actual (paginated, searchable,
@@ -351,21 +409,41 @@ const buildLifetimeEarningsMatch = async (query: Record<string, unknown>) => {
 // transactionId), snapperId, userId, from/to (completedAt range, ISO date strings),
 // sort, page, limit, fields. Totals reflect the same filtered scope as the list below
 // them.
+//
+// Booking revenue isn't the platform's only income — a snapper paying to upgrade their
+// storage plan (Payment.paymentType === STORAGE_UPGRADE) is 100% platform revenue with
+// no booking behind it at all, so it's tracked as a second, additive totals+list pair
+// (storageRevenue/storagePayments) rather than folded into totalRevenue/bookings above,
+// which stay booking-only for backward compatibility. grandTotalRevenue is the sum of
+// both streams. The same page/limit/sort query params drive both paginated lists.
 const getAdminLifetimeEarnings = async (query: Record<string, unknown>) => {
   const { snapperId, userId, from, to, searchTerm, ...restQuery } = query;
   const match = await buildLifetimeEarningsMatch(query);
+  const storageMatch = buildStoragePaymentsMatch(query);
 
-  const [summary] = await Booking.aggregate([
-    { $match: match },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: "$totalPrice" },
-        adminCommission: { $sum: "$serviceFee" },
-        snapperEarning: { $sum: { $subtract: ["$totalPrice", "$serviceFee"] } },
-        totalBookings: { $sum: 1 },
+  const [[summary], [storageSummary]] = await Promise.all([
+    Booking.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$totalPrice" },
+          adminCommission: { $sum: "$serviceFee" },
+          snapperEarning: { $sum: { $subtract: ["$totalPrice", "$serviceFee"] } },
+          totalBookings: { $sum: 1 },
+        },
       },
-    },
+    ]),
+    Payment.aggregate([
+      { $match: storageMatch },
+      {
+        $group: {
+          _id: null,
+          storageRevenue: { $sum: "$amount" },
+          totalStoragePayments: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 
   const earningsQuery = new QueryBuilder(
@@ -384,14 +462,48 @@ const getAdminLifetimeEarnings = async (query: Record<string, unknown>) => {
     .paginate()
     .fields();
 
-  const bookings = await earningsQuery.modelQuery;
-  const meta = await earningsQuery.countTotal();
+  const storagePaymentsQuery = new QueryBuilder(
+    Payment.find(storageMatch).populate("userId", "fullName email profileImage"),
+    restQuery
+  )
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const [bookings, meta, storagePayments, storagePaymentsMeta] = await Promise.all([
+    earningsQuery.modelQuery,
+    earningsQuery.countTotal(),
+    storagePaymentsQuery.modelQuery,
+    storagePaymentsQuery.countTotal(),
+  ]);
+
+  const totalRevenue = summary?.totalRevenue ?? 0;
+  const storageRevenue = storageSummary?.storageRevenue ?? 0;
 
   const result: IAdminLifetimeEarnings = {
-    totalRevenue: summary?.totalRevenue ?? 0,
+    totalRevenue,
     adminCommission: summary?.adminCommission ?? 0,
     snapperEarning: summary?.snapperEarning ?? 0,
     totalBookings: summary?.totalBookings ?? 0,
+    storageRevenue,
+    totalStoragePayments: storageSummary?.totalStoragePayments ?? 0,
+    storagePaymentsMeta,
+    grandTotalRevenue: totalRevenue + storageRevenue,
+    storagePayments: storagePayments.map(
+      (payment): IAdminStoragePayment => ({
+        _id: payment._id,
+        paymentNumber: payment.paymentNumber,
+        snapperId: payment.userId,
+        storagePlan: payment.storagePlan ?? null,
+        durationMonths: payment.durationMonths ?? null,
+        amount: payment.amount,
+        currency: payment.currency,
+        gateway: payment.gateway,
+        transactionId: payment.transactionId ?? null,
+        paidAt: payment.paidAt ?? null,
+      })
+    ),
     bookings: bookings.map((booking) => {
       const payment = booking.paymentId as unknown as
         | (IAdminEarningPayment & { _id: unknown })

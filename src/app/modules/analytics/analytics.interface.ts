@@ -39,8 +39,11 @@ export interface IAdminOverview {
   totalUsers: number; // role === "user" (customers) only
   totalSnappers: number; // role === "snapper"
   activeBookings: number; // accepted..delivery-in-progress, not yet closed out
-  // platform's own cut (sum of serviceFee) over COMPLETED + PAID bookings, platform-wide
+  // true platform total: gross totalPrice over COMPLETED + PAID bookings, plus
+  // storageRevenue below — see bookingRevenue/storageRevenue for the breakdown
   totalRevenue: number;
+  bookingRevenue: number; // gross totalPrice, COMPLETED + PAID bookings only
+  storageRevenue: number; // SUCCEEDED STORAGE_UPGRADE payments — snapper-to-platform, no split
   pendingApproval: number; // snappers awaiting admin approval
   recentUsers: IRecentUser[]; // latest 6 users, any role
 }
@@ -108,14 +111,40 @@ export interface IAdminEarningRecord {
   payment: IAdminEarningPayment | null;
 }
 
+// one SUCCEEDED STORAGE_UPGRADE payment behind storageRevenue in IAdminLifetimeEarnings —
+// unlike a booking, the full amount is platform revenue (no snapper split)
+export interface IAdminStoragePayment {
+  _id: unknown;
+  paymentNumber: string;
+  snapperId: unknown; // populated: fullName, email, profileImage — the buyer (Payment.userId)
+  storagePlan: string | null;
+  durationMonths: number | null;
+  amount: number;
+  currency: string;
+  gateway: string;
+  transactionId: string | null;
+  paidAt: Date | null;
+}
+
 // all-time equivalent of IMonthlyEarningBreakdown, with no month/year grouping — plus
 // the actual bookings behind the totals, paginated (see analytics.service.ts)
 export interface IAdminLifetimeEarnings {
   totalRevenue: number; // gross totalPrice, COMPLETED + PAID bookings only
-  adminCommission: number; // platform's own cut (serviceFee)
+  adminCommission: number; // platform's own cut (serviceFee) — booking revenue only
   snapperEarning: number; // totalRevenue - adminCommission, owed to snappers
   totalBookings: number;
   bookings: IAdminEarningRecord[];
+
+  // storage-plan upgrade revenue (Payment.paymentType === STORAGE_UPGRADE) — a separate
+  // snapper-to-platform revenue stream that never touches a Booking, so it's additive
+  // to (not folded into) the booking figures above
+  storageRevenue: number;
+  totalStoragePayments: number;
+  storagePayments: IAdminStoragePayment[];
+  storagePaymentsMeta: { page: number; limit: number; total: number; totalPage: number };
+
+  // true platform total across both revenue streams
+  grandTotalRevenue: number;
 }
 
 // booking volume by status, one month — grouped by createdAt (when the booking was

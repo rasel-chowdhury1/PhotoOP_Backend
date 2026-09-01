@@ -19,7 +19,7 @@ const stripe = {
 const payment_success_url = process.env.PAYMENT_SUCCESS_URL || 'photoop://payment/success';
 const payment_cancel_url = process.env.PAYMENT_CANCEL_URL || 'photoop://payment/cancel';
 
-// "local" | "s3" — see src/app/utils/storage/index.ts. Only "local" is implemented.
+// "local" | "s3" — see src/app/utils/storage/index.ts.
 const storage_driver = process.env.STORAGE_DRIVER || 'local';
 
 // snapper payout policy — no prior convention existed for any of these, so they default

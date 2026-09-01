@@ -2,6 +2,7 @@ import httpStatus from "http-status";
 import catchAsync from "../../utils/catchAsync"; // adjust to your actual path
 import sendResponse from "../../utils/sendResponse"; // adjust to your actual path
 import { GalleryService } from "./gallery.service";
+import { storage } from "../../utils/storage";
 
 // GET /galleries  — snapper sees all their own galleries
 const getMyGalleries = catchAsync(async (req, res) => {
@@ -89,14 +90,11 @@ const updateGalleryImage = catchAsync(async (req, res) => {
   const { id } = req.params;
   const imageKey = req.params[0];
 
-  // adjust to however your upload middleware exposes the uploaded file/url
-  const newFile = req.file
-    ? {
-        url: req.file.path, // or req.file.location for S3, etc.
-        key: req.file.filename, // or the storage key your uploader returns
-        size: req.file.size,
-      }
-    : undefined;
+  // route the replacement file through the configured IStorageAdapter (local or S3,
+  // per STORAGE_DRIVER) instead of trusting multer's raw disk path/filename directly —
+  // multer only ever writes the temp file to local disk; storage.save() is what
+  // actually pushes it to S3 (and cleans up the temp file) when that driver is active
+  const newFile = req.file ? await storage.save(req.file, "profile") : undefined;
 
   const result = await GalleryService.updateGalleryImage(id, snapperId, imageKey, req.body, newFile);
 

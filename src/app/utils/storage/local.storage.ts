@@ -11,12 +11,19 @@ const toKey = (absolutePath: string): string =>
 
 const toAbsolutePath = (key: string): string => path.join(UPLOAD_ROOT, key);
 
-// key format: deliveries/{bookingId}/attempt-{n}/{filename} — parsed here to build the
-// API route that actually serves it (see booking.route.ts's asset-serving endpoint)
+// delivery assets (key format: deliveries/{bookingId}/attempt-{n}/{filename}) are
+// access-controlled, so they're parsed here to build the authenticated API route that
+// serves them (see booking.route.ts's asset-serving endpoint). Everything else (e.g.
+// profile/{filename} from gallery image replacement) has no such gate and is served
+// directly by express.static('public') — see app.ts — so it resolves to a plain
+// /uploads/{key} URL, the local equivalent of an S3 object URL.
 const getUrl = (key: string): string => {
   const segments = key.split("/");
-  const [, bookingId, ...rest] = segments; // segments[0] === "deliveries"
-  return `${config.public_base_url}/api/v1/bookings/${bookingId}/delivery/assets/${rest.join("/")}`;
+  if (segments[0] === "deliveries") {
+    const [, bookingId, ...rest] = segments;
+    return `${config.public_base_url}/api/v1/bookings/${bookingId}/delivery/assets/${rest.join("/")}`;
+  }
+  return `${config.public_base_url}/uploads/${key}`;
 };
 
 const exists = async (key: string): Promise<boolean> => {

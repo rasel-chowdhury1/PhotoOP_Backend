@@ -105,7 +105,7 @@ const moduleRoutes = [
    path: "/payout-methods",
    route: payoutMethodRoutes
    },
-      {
+   {
    path: "/service-charge",
    route: ServiceChargeRoutes
    },

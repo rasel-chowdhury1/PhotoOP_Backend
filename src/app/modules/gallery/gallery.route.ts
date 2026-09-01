@@ -1,4 +1,5 @@
 import { Router } from "express";
+import path from "path";
 
 import { GalleryController } from "./gallery.controller";
 import auth from "../../middleware/auth";
@@ -6,7 +7,13 @@ import validateRequest from "../../middleware/validateRequest";
 import { GalleryValidation } from "./gallery.validation";
 import fileUpload from "../../middleware/fileUpload";
 import { USER_ROLE } from "../user/user.constants";
-const upload = fileUpload('./public/uploads/profile');
+import config from "../../config";
+
+// must be an absolute path under config.upload_root — storage.save() (see
+// utils/storage/local.storage.ts) verifies the file was written under
+// path.join(UPLOAD_ROOT, folder) before deriving its key, and "profile" here is
+// the folder name passed to storage.save() in gallery.controller.ts
+const upload = fileUpload(path.join(config.upload_root, "profile"));
 
 const router = Router();
 

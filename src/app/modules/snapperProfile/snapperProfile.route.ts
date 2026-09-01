@@ -2,12 +2,20 @@ import { Router } from "express";
 import auth from "../../middleware/auth";
 import { snapperProfileController } from "./snapperProfile.controller";
 import { USER_ROLE } from "../user/user.constants";
+import { paymentController } from "../payment/payment.controller";
 
 
 export const snapperProfileRoutes = Router();
 
 snapperProfileRoutes
   .get("/verified", snapperProfileController.getVerifiedSnappers)
+
+
+  .post(
+    "/storage-plan/checkout",
+    auth(USER_ROLE.SNAPPER),
+    paymentController.createStoragePlanCheckout
+  )
 
   .get(
     "/storage-usage",
