@@ -1,8 +1,11 @@
 import { Request, Response } from "express";
+import path from "path";
 import httpStatus from "http-status";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import AppError from "../../error/AppError";
+import config from "../../config";
+import { storage } from "../../utils/storage";
 import { bookingService } from "./booking.service";
 
 const createBooking = catchAsync(async (req: Request, res: Response) => {
@@ -163,14 +166,16 @@ const serveDeliveryAsset = catchAsync(async (req: Request, res: Response) => {
   // Express 4's unnamed wildcard (`/*`) captures the remainder in req.params[0]
   const keySuffix = req.params[0];
 
-  const absolutePath = await bookingService.resolveDeliveryAssetPath(
-    id,
-    keySuffix,
-    userId,
-    role === "admin"
-  );
+  const key = await bookingService.resolveDeliveryAssetKey(id, keySuffix, userId, role === "admin");
 
-  res.sendFile(absolutePath);
+  // S3 objects are served directly from the bucket — there's nothing on this
+  // server's disk to stream, so redirect instead. Local files are still local disk.
+  if (config.storage_driver === "s3") {
+    res.redirect(storage.getUrl(key));
+    return;
+  }
+
+  res.sendFile(path.join(path.resolve(config.upload_root), key));
 });
 
 

@@ -4,7 +4,6 @@ import mongoose, { Types } from "mongoose";
 import path from "path";
 import AppError from "../../error/AppError";
 import QueryBuilder from "../../builder/QueryBuilder";
-import config from "../../config";
 import { storage } from "../../utils/storage";
 import Booking from "./booking.model";
 import Delivery from "./delivery.model";
@@ -876,10 +875,12 @@ const recordUploadedDeliveryAssets = async (files: Express.Multer.File[], folder
   }
 };
 
-// resolves an uploaded delivery asset's absolute filesystem path for GET .../delivery/assets/*,
+// resolves an uploaded delivery asset's storage key for GET .../delivery/assets/*,
 // enforcing ownership, path-traversal safety, and existence — a failure at ANY of these
-// checks is reported as 404 (not 403/400) so a non-owner can't tell the asset exists
-const resolveDeliveryAssetPath = async (
+// checks is reported as 404 (not 403/400) so a non-owner can't tell the asset exists.
+// Driver-agnostic: the controller decides how to actually serve the key (local sendFile
+// vs. an S3 redirect) since that's the one part that genuinely differs by driver.
+const resolveDeliveryAssetKey = async (
   bookingId: string,
   keySuffix: string,
   requesterId: string,
@@ -898,20 +899,20 @@ const resolveDeliveryAssetPath = async (
     throw notFound();
   }
 
-  const uploadRoot = path.resolve(config.upload_root);
-  const bookingDeliveriesRoot = path.resolve(uploadRoot, "deliveries", bookingId);
-  const key = `deliveries/${bookingId}/${keySuffix}`;
-  const resolvedPath = path.resolve(uploadRoot, key);
-
-  if (!resolvedPath.startsWith(bookingDeliveriesRoot + path.sep)) {
+  // reject any ".." segment outright rather than resolving against a filesystem
+  // root — the key has to work as a validity boundary for both local paths and S3
+  // object keys, and only a plain string check makes sense for both
+  if (keySuffix.split("/").some((segment) => segment === "..")) {
     throw notFound();
   }
+
+  const key = `deliveries/${bookingId}/${keySuffix}`;
 
   if (!(await storage.exists(key))) {
     throw notFound();
   }
 
-  return resolvedPath;
+  return key;
 };
 
 // admin tooling only (no route wired up yet) — physically deletes a gallery's picture
@@ -1443,7 +1444,7 @@ export const bookingService = {
   getDeliveryHistory,
   recordUploadedDeliveryAssets,
   uploadDeliveryAssetsToGallery,
-  resolveDeliveryAssetPath,
+  resolveDeliveryAssetKey,
   deleteGalleryAssets,
   autoAcceptOverdueDeliveries,
   getSnapperBookingStats,

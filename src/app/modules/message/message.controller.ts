@@ -7,7 +7,7 @@ import { IChat } from '../chat/chat.interface';
 import Chat from '../chat/chat.model';
 import AppError from '../../error/AppError';
 import { ChatService } from '../chat/chat.service';
-import { storeFiles } from '../../utils/fileHelper';
+import { storage } from '../../utils/storage';
 
 const sendMessage = catchAsync(async (req: Request, res: Response) => {
   const {text, images, chatId} = req.body;
@@ -124,15 +124,13 @@ const fileUpload = catchAsync(async (req: Request, res: Response) => {
 
       if (req.files) {
     try {
-      // Use storeFiles to process all uploaded files
-      const filePaths = storeFiles(
-        'chat',
-        req.files as { [fieldName: string]: Express.Multer.File[] },
-      );
+      const files = (req.files as { [fieldName: string]: Express.Multer.File[] }).images;
 
-      // Set photos (multiple files)
-      if (filePaths.images && filePaths.images.length > 0) {
-        result = filePaths.images; // Assign full array of photos
+      // route through the configured IStorageAdapter (local or S3, per STORAGE_DRIVER)
+      // instead of trusting multer's raw disk path directly
+      if (files && files.length > 0) {
+        const uploaded = await storage.saveMany(files, 'chat');
+        result = uploaded.map((file) => file.url); // Assign full array of photo URLs
       }
 
     } catch (error: any) {

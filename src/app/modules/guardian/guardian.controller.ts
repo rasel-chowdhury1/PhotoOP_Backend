@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import httpStatus from 'http-status';
 import { ZodError } from 'zod';
 import AppError from '../../error/AppError';
-import { storeFile } from '../../utils/fileHelper';
+import { storage } from '../../utils/storage';
 import { GuardianApprovalStatus } from '../user/user.interface';
 import { guardianService } from './guardian.service';
 
@@ -56,9 +56,12 @@ const showVerificationForm = async (req: Request, res: Response) => {
 const submitVerification = async (req: Request, res: Response) => {
   const token = (req.body?.token as string) || (req.query.token as string) || undefined;
   const files = req.files as MulterFiles;
-  const idImage = files?.idImage?.[0] ? storeFile('guardian', files.idImage[0].filename) : undefined;
 
   try {
+    const idImage = files?.idImage?.[0]
+      ? (await storage.save(files.idImage[0], 'guardian')).url
+      : undefined;
+
     const result = await guardianService.submitVerification({
       token,
       decision: req.body?.decision,

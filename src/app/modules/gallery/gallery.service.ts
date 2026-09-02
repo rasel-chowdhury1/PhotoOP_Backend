@@ -1,11 +1,8 @@
-import path from "path";
 import { Types } from "mongoose";
 import httpStatus from "http-status";
 import QueryBuilder from "../../builder/QueryBuilder"; // adjust to your actual query-builder util
 import Gallery from "./gallery.model";
-// import { deleteFileFromStorage } from "../../utils/storage"; // adjust to your actual storage util (e.g. S3/Cloudinary delete)
 import AppError from "../../error/AppError";
-import config from "../../config";
 import { deleteFileFromStorage, storage } from "../../utils/storage";
 
 // =========================
@@ -47,9 +44,11 @@ const getSingleGallery = async (galleryId: string,) => {
 
 // =========================
 // View/serve a single image (customer, snapper, or admin — ownership checked directly
-// against the gallery's own userId/snapperId, no separate booking lookup needed)
+// against the gallery's own userId/snapperId, no separate booking lookup needed).
+// Returns the storage key, not a filesystem path — driver-agnostic; the controller
+// decides how to actually serve it (local sendFile vs. an S3 redirect)
 // =========================
-const getGalleryImagePath = async (
+const getGalleryImageKey = async (
   galleryId: string,
   imageKey: string,
   requesterId: string,
@@ -81,7 +80,7 @@ const getGalleryImagePath = async (
     throw notFound();
   }
 
-  return path.join(path.resolve(config.upload_root), image.key);
+  return image.key;
 };
 
 // =========================
@@ -200,7 +199,7 @@ const updateGalleryImage = async (
 export const GalleryService = {
   getMyGalleries,
   getSingleGallery,
-  getGalleryImagePath,
+  getGalleryImageKey,
   updateGallery,
   deleteGalleryImage,
   updateGalleryImage,

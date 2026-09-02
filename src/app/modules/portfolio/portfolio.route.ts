@@ -1,4 +1,5 @@
 import { Router } from "express";
+import path from "path";
 import auth from "../../middleware/auth";
 import fileUpload from "../../middleware/fileUpload";
 import parseData from "../../middleware/parseData";
@@ -6,8 +7,12 @@ import validateRequest from "../../middleware/validateRequest";
 import { portfolioController } from "./portfolio.controller";
 import { portfolioValidation } from "./portfolio.validation";
 import { USER_ROLE } from "../user/user.constants";
+import config from "../../config";
 
-const upload = fileUpload("./public/uploads/portfolio");
+// must be an absolute path under config.upload_root — storage.save() (see
+// utils/storage/local.storage.ts) verifies the file was written under
+// path.join(UPLOAD_ROOT, folder) before deriving its key
+const upload = fileUpload(path.join(config.upload_root, "portfolio"));
 
 export const portfolioRoutes = Router();
 

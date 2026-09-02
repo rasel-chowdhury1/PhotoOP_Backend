@@ -17,7 +17,6 @@ export const sendNotificationByFcmToken = async (
 
   const findUser = await User.findOne({ _id: receiverId });
 
-  console.log({ findUser });
 
   if (!findUser) {
     console.log(`User with id ${receiverId} not found`);

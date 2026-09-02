@@ -481,7 +481,6 @@ export const emitNotification = async ({
 
     // Save notification to the database
    const result = await Notification.create(newNotification);
-   console.log({result})
 
   // Send a push notification via FCM when push is allowed
   if (pushAllowed) {

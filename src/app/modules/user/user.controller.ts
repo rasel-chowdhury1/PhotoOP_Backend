@@ -2,18 +2,20 @@ import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
-import { storeFile } from '../../utils/fileHelper';
+import { storage } from '../../utils/storage';
 import { userService } from './user.service';
 
 // runs before validateRequest so a required identityImage (snapper signup) is
-// already a stored path by the time the body is validated
-const attachSignupFiles = (req: Request, _res: Response, next: NextFunction) => {
+// already a stored URL (local or S3, per STORAGE_DRIVER) by the time the body is
+// validated
+const attachSignupFiles = catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
   if (files?.identityImage?.[0]) {
-    req.body.identityImage = storeFile('profile', files.identityImage[0].filename);
+    const uploaded = await storage.save(files.identityImage[0], 'profile');
+    req.body.identityImage = uploaded.url;
   }
   next();
-};
+});
 
 const createUser = catchAsync(async (req: Request, res: Response) => {
   const createUserToken = await userService.createUserToken(req.body);
@@ -138,10 +140,10 @@ const getAllUsersOverview = catchAsync(async (req: Request, res: Response) => {
 const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
   if (req?.files && !Array.isArray(req.files)) {
     if (req.files.profileImage?.[0]) {
-      req.body.profileImage = storeFile('profile', req.files.profileImage[0].filename);
+      req.body.profileImage = (await storage.save(req.files.profileImage[0], 'profile')).url;
     }
     if (req.files.coverPhoto?.[0]) {
-      req.body.coverPhoto = storeFile('profile', req.files.coverPhoto[0].filename);
+      req.body.coverPhoto = (await storage.save(req.files.coverPhoto[0], 'profile')).url;
     }
   }
 
@@ -160,10 +162,10 @@ const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
 const updateAdminProfile = catchAsync(async (req: Request, res: Response) => {
   if (req?.files && !Array.isArray(req.files)) {
     if (req.files.profileImage?.[0]) {
-      req.body.profileImage = storeFile('profile', req.files.profileImage[0].filename);
+      req.body.profileImage = (await storage.save(req.files.profileImage[0], 'profile')).url;
     }
     if (req.files.coverPhoto?.[0]) {
-      req.body.coverPhoto = storeFile('profile', req.files.coverPhoto[0].filename);
+      req.body.coverPhoto = (await storage.save(req.files.coverPhoto[0], 'profile')).url;
     }
   }
 

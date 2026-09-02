@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import path from 'path';
 import { authControllers } from './auth.controller';
 import auth from '../../middleware/auth';
 import validateRequest from '../../middleware/validateRequest';
@@ -6,8 +7,12 @@ import { authValidation } from './auth.validation';
 import fileUpload from '../../middleware/fileUpload';
 import parseData from '../../middleware/parseData';
 import { userController } from '../user/user.controller';
+import config from '../../config';
 
-const upload = fileUpload('./public/uploads/profile');
+// must be an absolute path under config.upload_root — storage.save() (see
+// utils/storage/local.storage.ts) verifies the file was written under
+// path.join(UPLOAD_ROOT, folder) before deriving its key
+const upload = fileUpload(path.join(config.upload_root, 'profile'));
 
 
 

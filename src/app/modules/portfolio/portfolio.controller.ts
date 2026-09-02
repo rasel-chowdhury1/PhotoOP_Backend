@@ -2,18 +2,20 @@ import { NextFunction, Request, Response } from "express";
 import httpStatus from "http-status";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
-import { storeFile } from "../../utils/fileHelper";
+import { storage } from "../../utils/storage";
 import { portfolioService } from "./portfolio.service";
 
-// runs before validateRequest so an uploaded image is already a stored path by the
-// time the body is validated (create requires it; update accepts it optionally)
-const attachPortfolioImage = (req: Request, _res: Response, next: NextFunction) => {
+// runs before validateRequest so an uploaded image is already a stored URL (local or
+// S3, per STORAGE_DRIVER) by the time the body is validated (create requires it;
+// update accepts it optionally)
+const attachPortfolioImage = catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
   if (files?.image?.[0]) {
-    req.body.image = storeFile("portfolio", files.image[0].filename);
+    const uploaded = await storage.save(files.image[0], "portfolio");
+    req.body.image = uploaded.url;
   }
   next();
-};
+});
 
 const createPortfolio = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.user;

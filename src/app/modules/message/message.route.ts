@@ -1,10 +1,16 @@
 import { Router } from 'express';
+import path from 'path';
 import { messageController } from './message.controller';
 import auth from '../../middleware/auth';
 import { USER_ROLE } from '../user/user.constants';
 import fileUpload from '../../middleware/fileUpload';
 import parseData from '../../middleware/parseData';
-const upload = fileUpload('./public/uploads/chat');
+import config from '../../config';
+
+// must be an absolute path under config.upload_root — storage.save() (see
+// utils/storage/local.storage.ts) verifies the file was written under
+// path.join(UPLOAD_ROOT, folder) before deriving its key
+const upload = fileUpload(path.join(config.upload_root, 'chat'));
 
 export const messageRoutes = Router();
 

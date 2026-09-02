@@ -1,8 +1,10 @@
+import path from "path";
 import httpStatus from "http-status";
 import catchAsync from "../../utils/catchAsync"; // adjust to your actual path
 import sendResponse from "../../utils/sendResponse"; // adjust to your actual path
 import { GalleryService } from "./gallery.service";
 import { storage } from "../../utils/storage";
+import config from "../../config";
 
 // GET /galleries  — snapper sees all their own galleries
 const getMyGalleries = catchAsync(async (req, res) => {
@@ -43,14 +45,16 @@ const getGalleryImage = catchAsync(async (req, res) => {
   const { id } = req.params;
   const imageKey = req.params[0];
 
-  const absolutePath = await GalleryService.getGalleryImagePath(
-    id,
-    imageKey,
-    userId,
-    role === "admin"
-  );
+  const key = await GalleryService.getGalleryImageKey(id, imageKey, userId, role === "admin");
 
-  res.sendFile(absolutePath);
+  // S3 objects are served directly from the bucket — there's nothing on this
+  // server's disk to stream, so redirect instead. Local files are still local disk.
+  if (config.storage_driver === "s3") {
+    res.redirect(storage.getUrl(key));
+    return;
+  }
+
+  res.sendFile(path.join(path.resolve(config.upload_root), key));
 });
 
 // PATCH /galleries/:id  — update name/status

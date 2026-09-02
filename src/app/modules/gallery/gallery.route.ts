@@ -27,7 +27,7 @@ router.get(
 // snapper: get one gallery
 .get(
     "/:id",
-    auth(USER_ROLE.SNAPPER, USER_ROLE.USER, USER_ROLE.ADMIN),
+    // auth(USER_ROLE.SNAPPER, USER_ROLE.USER, USER_ROLE.ADMIN),
     GalleryController.getSingleGallery
 )
 
