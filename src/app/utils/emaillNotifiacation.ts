@@ -1,5 +1,5 @@
 import config from "../config";
-import { sendEmail } from "./mailSender";
+import { sendEmail, sendEmailViaApi } from "./mailSender";
 import {
   PRIMARY_COLOR,
   renderEmailLayout,
@@ -59,7 +59,7 @@ const otpSendEmail = async ({
     `,
   });
 
-  await sendEmail(sentTo, subject, emailBody);
+  await sendEmailViaApi(sentTo, subject, emailBody);
 };
 
 export { otpSendEmail };

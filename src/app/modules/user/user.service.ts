@@ -8,7 +8,7 @@ import { otpServices } from '../otp/otp.service';
 import { generateOptAndExpireTime } from '../otp/otp.utils';
 import { TPurposeType } from '../otp/otp.interface';
 import { otpSendEmail } from '../../utils/emaillNotifiacation';
-import { sendEmail } from '../../utils/mailSender';
+import { sendEmail, sendEmailViaApi } from '../../utils/mailSender';
 import { renderButton, renderEmailLayout } from '../../utils/emailTemplate';
 import { createToken, verifyToken } from '../../utils/tokenManage';
 import { GUARDIAN_VERIFICATION_PURPOSE, requiresGuardianVerification } from './user.utils';
@@ -127,7 +127,7 @@ const buildAndSendGuardianConsentEmail = async (payload: {
     `,
   });
 
-  await sendEmail(payload.guardianEmail, 'Parental Consent Required for PhotoOp Snapper Account', html);
+  await sendEmailViaApi(payload.guardianEmail, 'Parental Consent Required for PhotoOp Snapper Account', html);
   
 };
 

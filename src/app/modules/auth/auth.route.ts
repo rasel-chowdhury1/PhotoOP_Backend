@@ -28,7 +28,7 @@ authRoutes
   )
 
 
-    .post(
+  .post(
     '/google-login', 
     authControllers.googleLogin
   )

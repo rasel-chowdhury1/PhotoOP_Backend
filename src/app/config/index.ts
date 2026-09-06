@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.join((process.cwd(), '.env')) });
 
+const emailService = {
+  url: process.env.EMAIL_SERVICE_URL,
+  apiKey: process.env.EMAIL_SERVICE_API_KEY,
+};
+
 const aws = {
   accessKeyId: process.env.S3_BUCKET_ACCESS_KEY,
   secretAccessKey: process.env.S3_BUCKET_SECRET_ACCESS_KEY,
@@ -94,6 +99,7 @@ export default {
   upload_root,
   public_base_url,
   smtp,
+  emailService,
   aws,
   stripe,
   withdrawal,

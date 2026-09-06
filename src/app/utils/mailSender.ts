@@ -7,6 +7,59 @@ import config from '../config';
 export const LOGO_CID = 'photoop-logo';
 const LOGO_PATH = path.join(process.cwd(), 'public', 'uploads', 'logo', 'PhotoOp_logo.png');
 
+
+export const sendEmailViaApi = async (
+  to: string,
+  subject: string,
+  html: string,
+  text = '',
+) => {
+  try {
+    console.log('==========>>> Sending email via REST API...');
+
+    const response = await fetch(
+      `${config.emailService.url}/sent_email`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': config.emailService.apiKey,
+        },
+        body: JSON.stringify({
+          to,
+          subject,
+          text,
+          html,
+        }),
+      },
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        data?.message ||
+        'Email service request failed',
+      );
+    }
+
+    console.log(
+      '==========>>> Email sent successfully via REST API',
+      data.messageId,
+    );
+
+    return data;
+  } catch (error) {
+    console.error(
+      '==========>>> Email API error:',
+      error,
+    );
+
+    throw error;
+  }
+};
+
 export const sendEmail = async (to: string, subject: string, html: string) => {
 
   const transporter = nodemailer.createTransport({
