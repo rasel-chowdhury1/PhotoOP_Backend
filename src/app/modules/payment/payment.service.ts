@@ -382,12 +382,16 @@ const getMyTransactions = async (
 ) => {
   let baseFilter: Record<string, unknown>;
 
+
+
   if (role === "snapper") {
     const snapperBookingIds = await Booking.find({ snapperId: userId }).distinct("_id");
-    baseFilter = { $or: [{ userId }, { bookingId: { $in: snapperBookingIds } }] };
+    baseFilter = { $or: [{ userId , status: {$ne: PaymentStatus.PENDING}}, { bookingId: { $in: snapperBookingIds } }] };
   } else {
-    baseFilter = { userId };
+    baseFilter = { userId, status: {$ne: PaymentStatus.PENDING} };
   }
+
+
 
   const paymentQuery = new QueryBuilder(
     Payment.find(baseFilter).populate(TRANSACTION_POPULATE),

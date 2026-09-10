@@ -193,7 +193,7 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   if (!isWithinAnySlot) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      "The snapper is not available for the selected date/time"
+      "The selected snapper is not available for the chosen date and time. Please select a different date or time."
     );
   }
 
@@ -201,6 +201,7 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   const sameDayBookings = await Booking.find({
     snapperId,
     isDeleted: false,
+    paymentStatus: PaymentStatus.PAID,
     // still-live bookings that legitimately hold this slot; UPCOMING replaces the old
     // RESCHEDULE_PENDING status here now that BookingStatus no longer has it
     status: { $in: [BookingStatus.PENDING, BookingStatus.ACCEPTED, BookingStatus.UPCOMING] },
@@ -212,7 +213,7 @@ const createBooking = async (payload: ICreateBookingPayload, customerUserId: str
   );
 
   if (hasConflict) {
-    throw new AppError(httpStatus.CONFLICT, "This time slot is no longer available");
+    throw new AppError(httpStatus.CONFLICT, "The selected snapper is not available for the chosen date and time. Please select a different date or time.");
   }
 
   const selectedAddOns = resolveSelectedAddOns(payload.selectedAddOnKeys);
@@ -283,7 +284,7 @@ const getMyBookingsAsCustomer = async (
     : {};
 
   const bookingQuery = new QueryBuilder(
-    Booking.find({ userId, isDeleted: false, ...tabFilter })
+    Booking.find({ userId, isDeleted: false, paymentStatus: PaymentStatus.PAID, ...tabFilter })
       .populate("snapperId", "fullName profileImage")
       .populate("packageId", "packageName price durationValue durationUnit")
       .populate("currentDeliveryId"),
@@ -311,7 +312,7 @@ const getMyBookingsAsSnapper = async (
     : {};
 
   const bookingQuery = new QueryBuilder(
-    Booking.find({ snapperId, isDeleted: false, ...tabFilter })
+    Booking.find({ snapperId, isDeleted: false, paymentStatus: PaymentStatus.PAID, ...tabFilter })
       .populate("userId", "fullName profileImage")
       .populate("packageId", "packageName price durationValue durationUnit")
       .populate("currentDeliveryId"),
