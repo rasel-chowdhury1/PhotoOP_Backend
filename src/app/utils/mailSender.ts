@@ -87,8 +87,9 @@ transporter.verify((err, success) => {
   }
 });  
 
-
-type MailAttachment = NonNullable<Parameters<typeof transporter.sendMail>[0]['attachments']>[number];
+type MailAttachment = NonNullable<
+  Parameters<typeof transporter.sendMail>[0]["attachments"]
+>[number];
 
 export const sendEmail = async (
   to: string,
@@ -98,13 +99,13 @@ export const sendEmail = async (
   attachments?: MailAttachment[],
 ) => {
 
-  // every email gets the logo inline (referenced in the html as <img src="cid:LOGO_CID">),
-  // plus whatever extra attachments the caller passed in (e.g. a PDF invoice)
+  // Logo image hosted on Cloudinary
   const logoAttachment: MailAttachment = {
-    filename: 'PhotoOp_logo.png',
-    path: LOGO_PATH,
-    cid: LOGO_CID,
+    filename: "PhotoOp_logo.png",
+    href: "https://res.cloudinary.com/nuzyf0ud/image/upload/v1789558054/logo.png",
+    cid: "LOGO_CID",
   };
+
 
   try {
      console.log('mail send started =>>>>>>>>> ');
