@@ -56,11 +56,6 @@ const smtp = {
   user: process.env.NODEMAILER_HOST_EMAIL,
   pass: process.env.NODEMAILER_HOST_PASS,
   fromName: process.env.NODEMAILER_FROM_NAME,
-
-  region: process.env.AWS_REGION as string,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
-
   fromEmail: process.env.MAIL_FROM_EMAIL as string,
 }
 

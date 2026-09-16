@@ -59,7 +59,7 @@ const otpSendEmail = async ({
     `,
   });
 
-  await sendEmailViaApi(sentTo, subject, emailBody);
+  await sendEmail(sentTo, subject, emailBody);
 };
 
 export { otpSendEmail };

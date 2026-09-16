@@ -127,7 +127,7 @@ const buildAndSendGuardianConsentEmail = async (payload: {
     `,
   });
 
-  await sendEmailViaApi(payload.guardianEmail, 'Parental Consent Required for PhotoOp Snapper Account', html);
+  await sendEmail(payload.guardianEmail, 'Parental Consent Required for PhotoOp Snapper Account', html);
   
 };
 

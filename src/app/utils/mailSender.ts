@@ -60,44 +60,110 @@ export const sendEmailViaApi = async (
   }
 };
 
-export const sendEmail = async (to: string, subject: string, html: string) => {
 
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: config.NODE_ENV === 'production',
-    auth: {
-      // TODO: replace `user` and `pass` values from <https://forwardemail.net>
-      user: config.nodemailer_host_email,
-      pass: config.nodemailer_host_pass,
-    },
-  });
+const isProduction = process.env.NODE_ENV === 'production';
+
+// console.log(" isProduction:", isProduction);
+// console.log(" config.smtp.host:", config.smtp.host);
+// console.log(" config.smtp.user:", config.smtp.user);
+// console.log(" config.smtp.pass:", config.smtp.pass);
+
+const transporter = nodemailer.createTransport({
+  host: config.smtp.host, // sending SMTP server
+  port: isProduction ? 465 : 587,             // SSL port
+  secure: isProduction,           // true for port 465
+  auth: {
+    user: config.smtp.user,        // webmail email
+    pass: config.smtp.pass   // SMTP/webmail password
+  },
+  tls: { rejectUnauthorized: false },
+});
+
+transporter.verify((err, success) => {
+  if (err) {
+    console.error('SMTP connection failed', err);
+  } else {
+    console.log('SMTP is ready to send mail');
+  }
+});  
 
 
+type MailAttachment = NonNullable<Parameters<typeof transporter.sendMail>[0]['attachments']>[number];
+
+export const sendEmail = async (
+  to: string,
+  subject: string,
+  html: string,
+  headers?: Record<string, string>,
+  attachments?: MailAttachment[],
+) => {
+
+  // every email gets the logo inline (referenced in the html as <img src="cid:LOGO_CID">),
+  // plus whatever extra attachments the caller passed in (e.g. a PDF invoice)
+  const logoAttachment: MailAttachment = {
+    filename: 'PhotoOp_logo.png',
+    path: LOGO_PATH,
+    cid: LOGO_CID,
+  };
 
   try {
-     console.log('==========>>>   mail send sending.....');
+     console.log('mail send started =>>>>>>>>> ');
     await transporter.sendMail({
       from: `"${config.smtp.fromName}" <${config.smtp.fromEmail}>`, // sender address
       to, // list of receivers
       subject,
-      text: '', // plain text body
       html, // html body
-      attachments: [
-        {
-          filename: 'PhotoOp_logo.png',
-          path: LOGO_PATH,
-          cid: LOGO_CID,
-        },
-      ],
+      headers, // optional custom headers (e.g. List-Unsubscribe)
+      attachments: [logoAttachment, ...(attachments || [])],
     });
 
-    console.log("==========>>> mail sent successfully!!!")
-
-  } catch (error) {
+    console.log('mail sended successfully =>>>>>>>> ');
     
+  } catch (error) {
     console.log('send mail error:', error);
-
+    
   }
-  console.log('==========>>> mail send stopped');
+  console.log('mail sended stopped');
 };
+
+// export const sendEmail = async (to: string, subject: string, html: string) => {
+
+//   const transporter = nodemailer.createTransport({
+//     host: 'smtp.gmail.com',
+//     port: 587,
+//     secure: config.NODE_ENV === 'production',
+//     auth: {
+//       // TODO: replace `user` and `pass` values from <https://forwardemail.net>
+//       user: config.nodemailer_host_email,
+//       pass: config.nodemailer_host_pass,
+//     },
+//   });
+
+
+
+//   try {
+//      console.log('==========>>>   mail send sending.....');
+//     await transporter.sendMail({
+//       from: `"${config.smtp.fromName}" <${config.smtp.fromEmail}>`, // sender address
+//       to, // list of receivers
+//       subject,
+//       text: '', // plain text body
+//       html, // html body
+//       attachments: [
+        // {
+        //   filename: 'PhotoOp_logo.png',
+        //   path: LOGO_PATH,
+        //   cid: LOGO_CID,
+        // },
+//       ],
+//     });
+
+//     console.log("==========>>> mail sent successfully!!!")
+
+//   } catch (error) {
+    
+//     console.log('send mail error:', error);
+
+//   }
+//   console.log('==========>>> mail send stopped');
+// };
