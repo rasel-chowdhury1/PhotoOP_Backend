@@ -3,57 +3,57 @@ import path from 'path';
 import config from '../config';
 
 
-export const sendEmailViaApi = async (
-  to: string,
-  subject: string,
-  html: string,
-  text = '',
-) => {
-  try {
-    console.log('==========>>> Sending email via REST API...');
+// export const sendEmailViaApi = async (
+//   to: string,
+//   subject: string,
+//   html: string,
+//   text = '',
+// ) => {
+//   try {
+//     console.log('==========>>> Sending email via REST API...');
 
-    const response = await fetch(
-      `${config.emailService.url}/sent_email`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': config.emailService.apiKey,
-        },
-        body: JSON.stringify({
-          to,
-          subject,
-          text,
-          html,
-        }),
-      },
-    );
+//     const response = await fetch(
+//       `${config.emailService.url}/sent_email`,
+//       {
+//         method: 'POST',
+//         headers: {
+//           'Content-Type': 'application/json',
+//           'x-api-key': config.emailService.apiKey,
+//         },
+//         body: JSON.stringify({
+//           to,
+//           subject,
+//           text,
+//           html,
+//         }),
+//       },
+//     );
 
-    const data = await response.json();
+//     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(
-        data?.error ||
-        data?.message ||
-        'Email service request failed',
-      );
-    }
+//     if (!response.ok) {
+//       throw new Error(
+//         data?.error ||
+//         data?.message ||
+//         'Email service request failed',
+//       );
+//     }
 
-    console.log(
-      '==========>>> Email sent successfully via REST API',
-      data.messageId,
-    );
+//     console.log(
+//       '==========>>> Email sent successfully via REST API',
+//       data.messageId,
+//     );
 
-    return data;
-  } catch (error) {
-    console.error(
-      '==========>>> Email API error:',
-      error,
-    );
+//     return data;
+//   } catch (error) {
+//     console.error(
+//       '==========>>> Email API error:',
+//       error,
+//     );
 
-    throw error;
-  }
-};
+//     throw error;
+//   }
+// };
 
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -87,6 +87,13 @@ type MailAttachment = NonNullable<
   Parameters<typeof transporter.sendMail>[0]["attachments"]
 >[number];
 
+export const LOGO_CID = "photoop-logo@photooprps.com";
+
+const LOGO_PATH = path.join(
+  process.cwd(),
+  "src/assets/logo.png",
+);
+
 export const sendEmail = async (
   to: string,
   subject: string,
@@ -95,33 +102,14 @@ export const sendEmail = async (
   attachments?: MailAttachment[],
 ) => {
 
-    // Add Cloudinary logo to the email
-    const emailHtml = `
-      <div style="
-        margin: 0;
-        padding: 0;
-        font-family: Arial, sans-serif;
-      ">
-        <div style="
-          text-align: center;
-          margin-bottom: 20px;
-        ">
-          <img
-            src="${config.smtp.logoUrl}"
-            alt="PhotoOp Logo"
-            width="150"
-            style="
-              display: inline-block;
-              max-width: 150px;
-              height: auto;
-              border: 0;
-            "
-          />
-        </div>
+    const logoAttachment: MailAttachment = {
+      filename: "logo.png",
+      path: LOGO_PATH,
+      cid: LOGO_CID,
+      contentType: "image/png",
+      contentDisposition: "inline",
+    };
 
-        ${html}
-      </div>
-    `;
 
   try {
      console.log('mail send started =>>>>>>>>> ');
@@ -129,9 +117,12 @@ export const sendEmail = async (
       from: `"${config.smtp.fromName}" <${config.smtp.fromEmail}>`, // sender address
       to, // list of receivers
       subject,
-      html: emailHtml, // html body
+      html, // html body
       headers, // optional custom headers (e.g. List-Unsubscribe)
-      attachments: attachments || [],
+      attachments: [
+        logoAttachment,
+        ...(attachments || []),
+      ],
     });
 
     console.log('mail sended successfully =>>>>>>>> ');

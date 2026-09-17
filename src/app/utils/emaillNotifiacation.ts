@@ -1,5 +1,5 @@
 import config from "../config";
-import { sendEmail, sendEmailViaApi } from "./mailSender";
+import { sendEmail } from "./mailSender";
 import {
   PRIMARY_COLOR,
   renderEmailLayout,

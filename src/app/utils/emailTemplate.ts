@@ -20,9 +20,9 @@ export const renderButton = (
 export const renderPoliciesSection = (): string => `
   <p style="margin-top:24px;font-size:12px;color:#999999;">
     By using PhotoOp, you agree to our
-    <a href="${config.client_Url}/terms" style="color:${PRIMARY_COLOR};text-decoration:none;">Terms of Service</a>
+    <a href="https://photooprps.com/terms-of-use" style="color:${PRIMARY_COLOR};text-decoration:none;">Terms of Service</a>
     and
-    <a href="${config.client_Url}/privacy" style="color:${PRIMARY_COLOR};text-decoration:none;">Privacy Policy</a>.
+    <a href="https://photooprps.com/privacy-policy" style="color:${PRIMARY_COLOR};text-decoration:none;">Privacy Policy</a>.
   </p>
 `;
 
