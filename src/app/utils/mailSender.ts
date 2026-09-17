@@ -2,11 +2,6 @@ import nodemailer from 'nodemailer';
 import path from 'path';
 import config from '../config';
 
-// referenced in email HTML as <img src="cid:LOGO_CID">, since email clients
-// can't load images from localhost/private URLs
-export const LOGO_CID = 'photoop-logo';
-const LOGO_PATH = path.join(process.cwd(), 'public', 'uploads', 'logo', 'PhotoOp_logo.png');
-
 
 export const sendEmailViaApi = async (
   to: string,
@@ -112,7 +107,7 @@ export const sendEmail = async (
           margin-bottom: 20px;
         ">
           <img
-            src="${LOGO_URL}"
+            src="${config.smtp.logoUrl}"
             alt="PhotoOp Logo"
             width="150"
             style="
@@ -134,9 +129,9 @@ export const sendEmail = async (
       from: `"${config.smtp.fromName}" <${config.smtp.fromEmail}>`, // sender address
       to, // list of receivers
       subject,
-      html, // html body
+      html: emailHtml, // html body
       headers, // optional custom headers (e.g. List-Unsubscribe)
-      attachments: [logoAttachment, ...(attachments || [])],
+      attachments: attachments || [],
     });
 
     console.log('mail sended successfully =>>>>>>>> ');
