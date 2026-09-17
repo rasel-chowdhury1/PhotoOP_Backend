@@ -256,6 +256,23 @@ const markPaymentSucceeded = async (session: Stripe.Checkout.Session) => {
     );
   });
 
+  emitNotification({
+    userId: updatedBooking.snapperId as Types.ObjectId,
+    receiverId: updatedBooking.userId as Types.ObjectId,
+
+    userMsg: {
+      image: '',
+      text: `Your payment for booking ${updatedBooking.bookingId} was successful.`,
+      photos: [],
+    },
+
+    type: NotificationType.BOOKING_CONFIRMED,
+  }).catch((error) => {
+    console.error(
+      'Failed to send payment success notification to user:',
+      error,
+    );
+  });
 
 };
 
