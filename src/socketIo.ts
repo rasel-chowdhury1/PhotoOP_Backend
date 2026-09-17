@@ -48,10 +48,6 @@ export const connectedUsers = new Map<
 >();
 
 
-console.log("connectedUsers ---->>> ", connectedUsers)
-
-
-
 export const initSocketIO = async (server: HttpServer): Promise<void> => {
   console.log("🔧 Initializing Socket.IO server 🔧");
 

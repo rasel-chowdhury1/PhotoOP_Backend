@@ -70,7 +70,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const transporter = nodemailer.createTransport({
   host: config.smtp.host, // sending SMTP server
-  port: isProduction ? 465 : 587,             // SSL port
+  port: isProduction ? 2525 : 587,             // SSL port
   secure: isProduction,           // true for port 465
   auth: {
     user: config.smtp.user,        // webmail email

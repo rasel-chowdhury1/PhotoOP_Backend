@@ -17,7 +17,6 @@ import {
   yellowBright,
 } from "colorette";
 
-console.log("node js running ===>>> ", process.cwd())
 
 // Define log file paths
 const LOGS_DIR = path.join(process.cwd(), 'logs');
