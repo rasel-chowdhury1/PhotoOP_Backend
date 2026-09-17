@@ -11,6 +11,7 @@ import handleCastError from '../error/CastError';
 import AppError from '../error/AppError';
 import { MulterError } from 'multer';
 import handelMulterError from '../error/MulterError';
+import { errorLineLogger } from '../utils/logger';
 
 const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
   // eslint-disable-next-line no-console
@@ -67,6 +68,16 @@ const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
       },
     ];
   }
+
+  errorLineLogger.error({
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    message,
+    stack: err?.stack,
+    method: req.method,
+    url: req.originalUrl,
+    status: statusCode,
+  });
 
   //ultimate return
   if (errorSources?.length !== 0) {

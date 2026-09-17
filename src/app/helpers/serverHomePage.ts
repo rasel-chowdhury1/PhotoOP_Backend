@@ -7,8 +7,10 @@ import osUtils from 'os-utils';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const responseLogFilePath = path.resolve(__dirname, '../../ResponseTime.log');
-const errorLogFilePath = path.resolve(__dirname, '../../app.log');
+const responseLogFilePath = path.resolve(__dirname, '../../../logs/ResponseTime.log');
+const errorLogFilePath = path.resolve(__dirname, '../../../logs/app.log');
+
+
 
 interface ErrorLogEntry {
   timestamp: string;
@@ -91,6 +93,74 @@ function readLogFile(): {
   };
 }
 
+
+function generateErrorLogTable(errorLogs: ErrorLogEntry[]): string {
+  if (!errorLogs.length) {
+    return `<p>No error logs found.</p>`;
+  }
+
+  const rows = errorLogs.map((log) => `
+    <tr>
+      <td>${log.timestamp}</td>
+      <td>${log.method}</td>
+      <td>${log.statusCode}</td>
+      <td>${log.message}</td>
+      <td>${log.errorPath}</td>
+      <td><pre>${log.stack}</pre></td>
+    </tr>
+  `).join('');
+
+  return `
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Method</th>
+          <th>Status Code</th>
+          <th>Message</th>
+          <th>Error Path</th>
+          <th>Stack Trace</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function generateResponseTimeTable(responseTimeLogs: ResponseLogEntry[]): string {
+  if (!responseTimeLogs.length) {
+    return `<p>No response time logs found.</p>`;
+  }
+
+  const rows = responseTimeLogs.map((log) => {
+    const labelClass = log.label === 'High' ? 'high-label' : log.label === 'Medium' ? 'medium-label' : 'low-label';
+    return `
+      <tr>
+        <td>${log.timestamp}</td>
+        <td>${log.method}</td>
+        <td>${log.route}</td>
+        <td>${log.responseTime} ms</td>
+        <td><span class="${labelClass}">${log.label}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <table class="response-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Method</th>
+          <th>Route</th>
+          <th>Response Time</th>
+          <th>Label</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
 async function generateCpuUsageHtml(): Promise<string> {
   return new Promise((resolve) => {
     osUtils.cpuUsage((usage: number) => {
@@ -115,12 +185,14 @@ async function generateCpuUsageHtml(): Promise<string> {
 }
 
 async function serverHomePage(): Promise<string> {
+
   const { errorLogs, responseTimeLogs } = readLogFile();
 
   // Import your existing generateErrorLogTable, generateResponseTimeTable here or define them in TS
-  const errorLogTableHtml = '...'; // Call your error log table generator
-  const responseTimeTableHtml = '...'; // Call your response time table generator
+  const errorLogTableHtml = generateErrorLogTable(errorLogs); // Call your error log table generator
+  const responseTimeTableHtml = generateResponseTimeTable(responseTimeLogs); // Call your response time table generator
   const cpuUsageHtml = await generateCpuUsageHtml();
+
 
   return `
   <!DOCTYPE html>

@@ -17,6 +17,7 @@ import {
   yellowBright,
 } from "colorette";
 
+console.log("node js running ===>>> ", process.cwd())
 
 // Define log file paths
 const LOGS_DIR = path.join(process.cwd(), 'logs');
@@ -121,22 +122,26 @@ export const logHttpRequests = (
       return red(method + " " + "some error 😢☹️"); // Default for unknown methods
     };
 
-    // Log the request information with method, status, and response time in ms
-    // logger.info({
-    //   message: ` 🌐 Incoming Request: ${colorizeByMethod(req.method)} ${colorizeByStatusCode(res.statusCode)} ${magenta(req.originalUrl)} ⏱️ Response Time: ${yellowBright(`${Date.now() - startTime} ms`)}`,
-    //   size: res.get("Content-Length") || 0,
-    //   // additionalInfo: `🖥️ IP: ${req.ip} | Host: ${req.hostname} | User-Agent: ${req.get("User-Agent")}`,
-    // });
-
     const clientIp = req.ip
       ? req.ip.startsWith("::ffff:")
         ? req.ip.substring(7)
         : req.ip
       : "Unknown IP";
 
+    const responseTime = Date.now() - startTime;
+
     logger.info({
-      message: `🖥️ IP: ${clientIp} 📅: ${new Date().toLocaleDateString("en-US", { weekday: "long" })} 🌐 Incoming Request: ${colorizeByMethod(req.method)} ${colorizeByStatusCode(res.statusCode)} ${magenta(req.originalUrl)} ⏱️ Response Time: ${yellowBright(`${Date.now() - startTime} ms`)}`,
+      message: `🖥️ IP: ${clientIp} 📅: ${new Date().toLocaleDateString("en-US", { weekday: "long" })} 🌐 Incoming Request: ${colorizeByMethod(req.method)} ${colorizeByStatusCode(res.statusCode)} ${magenta(req.originalUrl)} ⏱️ Response Time: ${yellowBright(`${responseTime} ms`)}`,
       size: res.get("Content-Length") || 0,
+    });
+
+    responseLineLogger.info({
+      message: `${req.method} ${req.originalUrl} - ${responseTime}ms`,
+      timestamp: new Date().toISOString(),
+      url: req.originalUrl,
+      method: req.method,
+      responseTime,
+      statusCode: res.statusCode,
     });
   });
 
