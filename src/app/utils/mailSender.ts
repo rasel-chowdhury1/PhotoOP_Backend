@@ -100,13 +100,33 @@ export const sendEmail = async (
   attachments?: MailAttachment[],
 ) => {
 
-  // Logo image hosted on Cloudinary
-  const logoAttachment: MailAttachment = {
-    filename: "PhotoOp_logo.png",
-    href: "https://res.cloudinary.com/nuzyf0ud/image/upload/v1789558054/logo.png",
-    cid: "LOGO_CID",
-  };
+    // Add Cloudinary logo to the email
+    const emailHtml = `
+      <div style="
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      ">
+        <div style="
+          text-align: center;
+          margin-bottom: 20px;
+        ">
+          <img
+            src="${LOGO_URL}"
+            alt="PhotoOp Logo"
+            width="150"
+            style="
+              display: inline-block;
+              max-width: 150px;
+              height: auto;
+              border: 0;
+            "
+          />
+        </div>
 
+        ${html}
+      </div>
+    `;
 
   try {
      console.log('mail send started =>>>>>>>>> ');

@@ -41,53 +41,59 @@ const withdrawal = {
 // uploads convention as profile/portfolio images — lands at public/uploads/deliveries/...
 const upload_root = process.env.UPLOAD_ROOT || path.join(process.cwd(), 'public', 'uploads');
 
+
+const envConfig = process.env;
+
 // used to build the URL storage.getUrl() returns for an uploaded asset
 const public_base_url =
-  process.env.PUBLIC_BASE_URL || `http://${process.env.IP}:${process.env.PORT}`;
+  envConfig.PUBLIC_BASE_URL || `http://${envConfig.IP}:${envConfig.PORT}`;
 
 // base URL of this backend itself, used to build links (e.g. guardian verification
 // page) that must resolve back to this server rather than the CLIENT_URL frontend
 const server_base_url =
-  `${process.env.SERVER_URL}/api/v1`  || `http://${process.env.IP}:${process.env.PORT}/api/v1`;
+  `${envConfig.SERVER_URL}/api/v1`  || `http://${envConfig.IP}:${envConfig.PORT}/api/v1`;
 
-const smtp = {
-  host: process.env.NODEMAILER_HOST,
-  port: process.env.NODEMAILER_PORT,
-  user: process.env.NODEMAILER_HOST_EMAIL,
-  pass: process.env.NODEMAILER_HOST_PASS,
-  fromName: process.env.NODEMAILER_FROM_NAME,
-  fromEmail: process.env.MAIL_FROM_EMAIL as string,
+
+
+  const smtp = {
+  host: envConfig.NODEMAILER_HOST,
+  port: envConfig.NODEMAILER_PORT,
+  user: envConfig.NODEMAILER_HOST_EMAIL,
+  pass: envConfig.NODEMAILER_HOST_PASS,
+  fromName: envConfig.NODEMAILER_FROM_NAME,
+  fromEmail: envConfig.MAIL_FROM_EMAIL as string,
+  logoUrl: envConfig.LOGO_URL,
 }
 
 export default {
-  NODE_ENV: process.env.NODE_ENV,
-  port: process.env.PORT,
-  ip: process.env.IP,
-  database_url: process.env.DATABASE_URL,
-  server_url: process.env.SERVER_URL,
+  NODE_ENV: envConfig.NODE_ENV,
+  port: envConfig.PORT,
+  ip: envConfig.IP,
+  database_url: envConfig.DATABASE_URL,
+  server_url: envConfig.SERVER_URL,
   server_base_url,
-  client_Url: process.env.CLIENT_URL,
-  bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
-  jwt_access_secret: process.env.JWT_ACCESS_SECRET,
-  jwt_refresh_secret: process.env.JWT_REFRESH_SECRET,
-  jwt_access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
-  jwt_refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN,
-  nodemailer_host_email: process.env.NODEMAILER_HOST_EMAIL,
-  nodemailer_host_pass: process.env.NODEMAILER_HOST_PASS,
+  client_Url: envConfig.CLIENT_URL,
+  bcrypt_salt_rounds: envConfig.BCRYPT_SALT_ROUNDS,
+  jwt_access_secret: envConfig.JWT_ACCESS_SECRET,
+  jwt_refresh_secret: envConfig.JWT_REFRESH_SECRET,
+  jwt_access_expires_in: envConfig.JWT_ACCESS_EXPIRES_IN,
+  jwt_refresh_expires_in: envConfig.JWT_REFRESH_EXPIRES_IN,
+  nodemailer_host_email: envConfig.NODEMAILER_HOST_EMAIL,
+  nodemailer_host_pass: envConfig.NODEMAILER_HOST_PASS,
 
-  admin_email: process.env.ADMIN_EMAIL,
-  admin_password: process.env.ADMIN_PASSWORD,
-  admin_phone: process.env.ADMIN_PHONE,
+  admin_email: envConfig.ADMIN_EMAIL,
+  admin_password: envConfig.ADMIN_PASSWORD,
+  admin_phone: envConfig.ADMIN_PHONE,
 
-  twilio_account_sid: process.env.TWILIO_ACCOUNT_SID,
-  twilio_auth_token: process.env.TWILIO_AUTH_TOKEN,
-  twilio_phone_number: process.env.TWILIO_PHONE_NUMBER,
-  otp_expire_time: process.env.OTP_EXPIRE_TIME,
-  otp_token_expire_time: process.env.OTP_TOKEN_EXPIRE_TIME,
-  socket_port: process.env.SOCKET_PORT,
-  stripe_secret: process.env.STRIPE_API_SECRET,
-  stripe_key: process.env.STRIPE_API_KEY,
-  stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
+  twilio_account_sid: envConfig.TWILIO_ACCOUNT_SID,
+  twilio_auth_token: envConfig.TWILIO_AUTH_TOKEN,
+  twilio_phone_number: envConfig.TWILIO_PHONE_NUMBER,
+  otp_expire_time: envConfig.OTP_EXPIRE_TIME,
+  otp_token_expire_time: envConfig.OTP_TOKEN_EXPIRE_TIME,
+  socket_port: envConfig.SOCKET_PORT,
+  stripe_secret: envConfig.STRIPE_API_SECRET,
+  stripe_key: envConfig.STRIPE_API_KEY,
+  stripe_webhook_secret: envConfig.STRIPE_WEBHOOK_SECRET,
   payment_success_url,
   payment_cancel_url,
   storage_driver,
