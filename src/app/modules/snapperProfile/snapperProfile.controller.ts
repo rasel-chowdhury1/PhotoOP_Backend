@@ -7,7 +7,6 @@ import { snapperProfileService } from "./snapperProfile.service";
 const getVerifiedSnappers = catchAsync(
   async (req: Request, res: Response) => {
 
-    console.log("hitted snapper =>>> ")
     const result =
       await snapperProfileService.getVerifiedSnappers({
         page: req.query.page

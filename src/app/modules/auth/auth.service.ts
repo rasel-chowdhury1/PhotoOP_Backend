@@ -29,7 +29,7 @@ const twilioPhone = config.twilio_phone_number;
 const client = twilio(accountSid, authToken);
 // Login
 const login = async (payload: TLogin, req: Request) => {
-  console.log('payload', payload);
+
   const user = await User.isUserActive(payload?.email);
   
 
@@ -249,12 +249,9 @@ const appleLogin = async (
   req: Request,
 ) => {
 
-  console.log("Payload of Apple Login ===>>> ", payload)
-
   // 1️⃣ Find user by appleId (PRIMARY KEY)
   let user = await User.findOne({ appleId: payload.appleId });
 
-  console.log("user of apple =>>> ", user)
 
   // 2️⃣ If not found, try email (FIRST LOGIN ONLY)
   if (!user && payload.email) {
@@ -712,7 +709,6 @@ const forgotPasswordOtpMatch = async ({
   otp,
   token,
 }: OTPVerifyAndCreateUserProps) => {
-  console.log({ otp, token });
   if (!token) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Token not found');
   }
@@ -770,7 +766,6 @@ const resetPassword = async ({
   newPassword: string;
   confirmPassword: string;
 }) => {
-  console.log(newPassword, confirmPassword);
   if (newPassword !== confirmPassword) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password does not match');
   }
@@ -820,7 +815,6 @@ const changePassword = async ({
   newPassword: string;
   oldPassword: string;
 }) => {
-  console.log({ userId, newPassword, oldPassword });
   const user = await User.IsUserExistById(userId);
 
   if (!user) {

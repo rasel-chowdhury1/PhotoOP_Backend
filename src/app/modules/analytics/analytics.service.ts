@@ -206,7 +206,7 @@ const getAdminOverview = async (): Promise<IAdminOverview> => {
 
   const paymenStroange = await Payment.find({ paymentType: PaymentType.STORAGE_UPGRADE, status: PaymentDocStatus.SUCCEEDED });
 
-  console.log("paymeent Stroage =>>> ", paymenStroange)
+  
 
   return {
     totalUsers,

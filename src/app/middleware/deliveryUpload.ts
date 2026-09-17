@@ -68,8 +68,6 @@ export const resolveDeliveryUploadContext = catchAsync(
       folder: `deliveries/${bookingId}/attempt-${attempt}`,
     };
 
-    console.log("delivery upload context =>>> ", req.deliveryUploadContext)
-
     next();
   }
 );

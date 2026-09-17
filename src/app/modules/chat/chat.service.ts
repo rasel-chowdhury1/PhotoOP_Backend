@@ -244,7 +244,6 @@ const getMyChatList = async (userId: string, query: any) => {
 const getChatById = async (chatId: string) => {
   const result = await Chat.findById(chatId);
 
-  console.log(result);
   // If no chat is found, throw an AppError
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Chat not found');

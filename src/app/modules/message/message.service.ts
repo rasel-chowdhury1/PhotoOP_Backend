@@ -7,7 +7,7 @@ import { Types } from 'mongoose';
 import QueryBuilder from '../../builder/QueryBuilder';
 
 const sendMessage = async (data: any) => {
-  console.log({data})
+
    // Check if text, chatId, and sender are provided
    if (!data.text || !data.chat || !data.sender) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Text, chatId, and sender are required');

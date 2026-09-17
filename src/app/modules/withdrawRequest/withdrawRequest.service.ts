@@ -205,7 +205,6 @@ const getAllWithdrawRequests = async (query: Record<string, unknown>) => {
   const result = await withdrawQuery.modelQuery;
   const meta = await withdrawQuery.countTotal();
 
-  console.log({meta,result})
   return { meta, result };
 };
 

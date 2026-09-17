@@ -10,7 +10,6 @@ import { deleteFileFromStorage, storage } from "../../utils/storage";
 // =========================
 const getMyGalleries = async (snapperId: string, query: Record<string, unknown>) => {
   
-  console.log("snapper id =>>> ", snapperId)
     const galleryQuery = new QueryBuilder(
     Gallery.find({ snapperId: new Types.ObjectId(snapperId) }),
     query

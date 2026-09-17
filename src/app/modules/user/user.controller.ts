@@ -169,7 +169,6 @@ const updateAdminProfile = catchAsync(async (req: Request, res: Response) => {
     }
   }
 
-  console.log(req.user.userId, req.body)
 
   const result = await userService.updateAdminProfile(req.user.userId, req.body);
 

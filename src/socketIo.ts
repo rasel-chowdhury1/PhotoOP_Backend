@@ -308,12 +308,9 @@ export const initSocketIO = async (server: HttpServer): Promise<void> => {
       socket.on('readMessage', async (_, callback) => {
         try {
 
-          console.log("readMessage event hitteeddd =>>>>>>>>>>>>>>>> ");
-console.log("socket user =>>>>>>>>>>> ", socket.user);
 
           const userId = socket.user?._id;
 
-          console.log({userId})
           if (!userId) {
             return callbackFn(callback, { success: false, message: 'Unauthorized' });
           }
@@ -449,8 +446,6 @@ export const emitNotification = async ({
   const receiver = await User.findById(receiverId).select("notificationSettings");
   const pushAllowed = isPushAllowed(receiver?.notificationSettings, type);
 
-  console.log("userSocket ------>>>> ", userSocket);
-  console.log("connected ---->>> ", connectedUsers)
 
   // Notify the specific user
   if (userMsg && userSocket && pushAllowed) {

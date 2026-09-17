@@ -34,18 +34,13 @@ const checkOtpByEmail = async (email: string) => {
     sentTo: email,
   });
 
-  console.log({ email });
-
-  console.log({ isExist });
 
   const isExpireOtp = await Otp.findOne({
     sentTo: email,
     expiredAt: { $lt: new Date() }, // Use the `$gt` operator for comparison
   });
 
-  console.log({ isExpireOtp });
 
-  console.log('.........');
 
   return { isExist, isExpireOtp };
 };
@@ -55,24 +50,17 @@ const checkOtpByNumber = async (phone: string) => {
     sentTo: phone,
   });
 
-  console.log({ phone });
-
-  console.log({ isExist });
-
   const isExpireOtp = await Otp.findOne({
     sentTo: phone,
     expiredAt: { $lt: new Date() }, // Use the `$gt` operator for comparison
   });
 
-  console.log({ isExpireOtp });
-
-  console.log('.........');
 
   return { isExist, isExpireOtp };
 };
 
 const otpMatch = async (email: string, otp: string) => {
-  console.log(email, otp);
+
   const isOtpMatch = await Otp.findOne({
     sentTo: email,
     otp,
@@ -80,7 +68,6 @@ const otpMatch = async (email: string, otp: string) => {
     expiredAt: { $gt: new Date() },
   });
 
-  console.log({ isOtpMatch });
 
   return isOtpMatch;
 };

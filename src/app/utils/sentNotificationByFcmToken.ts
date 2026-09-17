@@ -13,7 +13,6 @@ export const sendNotificationByFcmToken = async (
   textMessage: string,
   titleName?: string
 ): Promise<void> => {
-  console.log({ receiverId, textMessage });
 
   const findUser = await User.findOne({ _id: receiverId });
 

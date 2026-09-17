@@ -75,9 +75,6 @@ const seenMessage = catchAsync(async (req: Request, res: Response) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'chat id is not valid');
   }
 
-  console.log({chatList})
-  console.log("user id ->>>  ", req.user.userId)
-
   const result = await messageService.seenMessage(
     req.user.userId,
     req.params.chatId,
