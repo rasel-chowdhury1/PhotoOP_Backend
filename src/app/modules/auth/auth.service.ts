@@ -132,6 +132,13 @@ const googleLogin = async (payload: { email: string, name: string, profileImage:
         );
       }
 
+      if (payload.role && user.role !== payload.role) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          `This account is registered as a ${user.role}. Please sign in from the correct app/role.`,
+        );
+      }
+
       if (user.isDeleted) {
         throw new AppError(
           httpStatus.FORBIDDEN,
@@ -271,6 +278,13 @@ const appleLogin = async (
       throw new AppError(
         httpStatus.FORBIDDEN,
         `This account is not registered for Apple Login`,
+      );
+    }
+
+    if (payload.role && user.role !== payload.role) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        `This account is registered as a ${user.role}. Please sign in from the correct app/role.`,
       );
     }
 
