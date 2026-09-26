@@ -286,6 +286,17 @@ const UserSchema = new Schema<TUser, UserModel>(
 
     approvalHistory: [ApprovalHistorySchema],
 
+    warnings: {
+      count: { type: Number, default: 0 },
+      logs: [
+        {
+          reason:    { type: String, required: true },
+          warnedAt:  { type: Date, default: Date.now },
+          warnedBy:  { type: Schema.Types.ObjectId, ref: 'User' },
+        },
+      ],
+    },
+
     isDeleted: {
       type: Boolean,
       default: false,

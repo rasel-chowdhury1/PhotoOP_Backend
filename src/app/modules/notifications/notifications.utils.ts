@@ -34,9 +34,11 @@ export const getEffectiveNotificationSettings = (
 type NotificationPreferenceCategory = keyof INotificationPreferences;
 
 // which preference category gates each notification type's real-time push. Types with
-// no entry here (currently just USER_JOINED, an admin-only system notification) are
-// ungated — they respect only the master pushEnabled switch. promotionalOffers has no
-// NotificationType mapped to it yet; add one here if/when a promotional type is introduced.
+// no entry here (USER_JOINED, and the account-moderation types ACCOUNT_WARNING/
+// ACCOUNT_BLOCKED/ACCOUNT_UNBLOCKED/ACCOUNT_DELETED, which a user should always be pushed
+// regardless of their category preferences) are ungated — they respect only the master
+// pushEnabled switch. promotionalOffers has no NotificationType mapped to it yet; add one
+// here if/when a promotional type is introduced.
 const NOTIFICATION_CATEGORY_BY_TYPE: Partial<Record<NotificationType, NotificationPreferenceCategory>> = {
   [NotificationType.NEW_MESSAGE]: "messageAlerts",
 

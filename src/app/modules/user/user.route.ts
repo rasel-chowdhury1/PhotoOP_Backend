@@ -166,6 +166,24 @@ userRoutes
     userController.addFavoriteUser,
   )
 
+  .patch(
+    '/warn/:id',
+    auth(USER_ROLE.ADMIN),
+    userController.warnUser,
+  )
+
+  .patch(
+    '/block/:id',
+    auth('admin'),
+    userController.blockedUser,
+  )
+
+  .delete(
+    '/delete/:id',
+    auth(USER_ROLE.ADMIN),
+    userController.deleteUserByAdmin,
+  )
+
   .delete(
     '/favorites/:id',
     auth(USER_ROLE.USER, USER_ROLE.SNAPPER, USER_ROLE.ADMIN),

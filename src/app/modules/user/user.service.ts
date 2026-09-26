@@ -8,8 +8,15 @@ import { otpServices } from '../otp/otp.service';
 import { generateOptAndExpireTime } from '../otp/otp.utils';
 import { TPurposeType } from '../otp/otp.interface';
 import { otpSendEmail } from '../../utils/emaillNotifiacation';
-import { sendEmail, sendEmailViaApi } from '../../utils/mailSender';
-import { renderButton, renderEmailLayout } from '../../utils/emailTemplate';
+import { sendEmail } from '../../utils/mailSender';
+import {
+  PRIMARY_COLOR,
+  renderButton,
+  renderEmailLayout,
+  renderPoliciesSection,
+  renderSignature,
+  renderSupportLine,
+} from '../../utils/emailTemplate';
 import { createToken, verifyToken } from '../../utils/tokenManage';
 import { GUARDIAN_VERIFICATION_PURPOSE, requiresGuardianVerification } from './user.utils';
 import { User } from './user.model';
@@ -1043,12 +1050,84 @@ const updateAdminApproval = async (
       }
     });
 
+    notifySnapperOfAdminApproval(user!, status, adminId, reason);
+
     return user;
   } finally {
     await session.endSession();
   }
 };
 
+// notifies a snapper (in-app + email) once the admin has approved or rejected their
+// verification — fire-and-forget so a notification/email hiccup never fails the approval itself
+const notifySnapperOfAdminApproval = (
+  user: TUser,
+  status: AdminApprovalStatus,
+  adminId: string,
+  reason?: string,
+) => {
+  if (user.role !== UserRole.SNAPPER) {
+    return;
+  }
+
+  if (status !== AdminApprovalStatus.APPROVED && status !== AdminApprovalStatus.REJECTED) {
+    return;
+  }
+
+  const isApproved = status === AdminApprovalStatus.APPROVED;
+
+  emitNotification({
+    userId: adminId,
+    receiverId: user._id,
+    userMsg: {
+      image: '',
+      text: isApproved
+        ? 'Your Snapper account has been approved. You can now start accepting bookings.'
+        : `Your Snapper account application was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+      photos: [],
+    },
+    type: isApproved
+      ? NotificationType.SNAPPER_VERIFICATION_APPROVED
+      : NotificationType.SNAPPER_VERIFICATION_REJECTED,
+  }).catch((error) => {
+    console.error('Failed to emit admin approval notification:', error);
+  });
+
+  if (!user.email) {
+    return;
+  }
+
+  const emailBody = renderEmailLayout({
+    preheader: isApproved
+      ? 'Your PhotoOp Snapper account has been approved.'
+      : 'Your PhotoOp Snapper account application was rejected.',
+    headerTitle: isApproved ? 'Account Approved' : 'Account Application Rejected',
+    bodyHtml: `
+      <p style="margin: 0 0 16px; line-height: 1.6;">Hello <strong>${user.fullName || ''}</strong>,</p>
+
+      <p style="margin: 0 0 16px; line-height: 1.6;">
+        ${isApproved
+          ? 'Great news! Your PhotoOp Snapper account has been reviewed and approved. You can now start accepting bookings on the platform.'
+          : `We're sorry to inform you that your PhotoOp Snapper account application was not approved.${reason ? ` Reason: <strong>${reason}</strong>` : ''}`
+        }
+      </p>
+
+      ${renderSupportLine()}
+      ${renderPoliciesSection()}
+      ${renderSignature()}
+    `,
+  });
+
+  sendEmail(
+    user.email,
+    isApproved
+      ? 'Your PhotoOp Snapper Account Has Been Approved'
+      : 'Your PhotoOp Snapper Account Application Was Rejected',
+    emailBody,
+  ).catch((error) => {
+    console.error('Failed to send admin approval email:', error);
+  });
+};
 
 const addFavoriteUser = async (userId: string, favoriteUserId: string) => {
   if (userId === favoriteUserId) {
@@ -1085,6 +1164,250 @@ const removeFavoriteUser = async (userId: string, favoriteUserId: string) => {
   }
 
   return result;
+};
+
+const warnUser = async (targetUserId: string, adminId: string, reason: string) => {
+  const user = await User.findOne({ _id: targetUserId, isDeleted: false });
+  if (!user) throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+
+  if (user.status === 'blocked') {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Cannot warn a blocked user');
+  }
+
+
+  await User.findByIdAndUpdate(targetUserId, {
+    $inc: { 'warnings.count': 1 },
+    $push: {
+      'warnings.logs': {
+        reason,
+        warnedAt: new Date(),
+        warnedBy: adminId,
+      },
+    },
+  });
+
+  notifyUserOfWarning(user, adminId, reason);
+
+  return User.findById(targetUserId).select('name email status warnings');
+};
+
+// notifies a warned user (in-app + email) — fire-and-forget so a notification/email
+// hiccup never fails the warning itself
+const notifyUserOfWarning = (user: TUser, adminId: string, reason: string) => {
+  emitNotification({
+    userId: adminId,
+    receiverId: user._id,
+    userMsg: {
+      image: '',
+      text: `You have received a warning from the PhotoOp team: ${reason}`,
+      photos: [],
+    },
+    type: NotificationType.ACCOUNT_WARNING,
+  }).catch((error) => {
+    console.error('Failed to emit account warning notification:', error);
+  });
+
+  if (!user.email) {
+    return;
+  }
+
+  const emailBody = renderEmailLayout({
+    preheader: 'You have received a warning on your PhotoOp account.',
+    headerTitle: 'Account Warning',
+    bodyHtml: `
+      <p style="margin: 0 0 16px; line-height: 1.6;">Hello <strong>${user.fullName || ''}</strong>,</p>
+
+      <p style="margin: 0 0 16px; line-height: 1.6;">
+        Your PhotoOp account has received a warning from our team for the following reason:
+      </p>
+
+      <div style="background-color: #f4f6fb; border-left: 4px solid ${PRIMARY_COLOR}; padding: 16px; margin: 16px 0;">
+        <p style="margin: 0;">${reason}</p>
+      </div>
+
+      <p style="margin: 0 0 16px; line-height: 1.6;">
+        Please review our Terms of Service and Community Guidelines to avoid further action on your account,
+        which may include suspension or blocking.
+      </p>
+
+      ${renderSupportLine()}
+      ${renderPoliciesSection()}
+      ${renderSignature()}
+    `,
+  });
+
+  sendEmail(user.email, 'Account Warning - PhotoOp', emailBody).catch((error) => {
+    console.error('Failed to send account warning email:', error);
+  });
+};
+
+
+const blockedUser = async (id: string, adminId: string) => {
+  // Find the user
+  const singleUser = await User.IsUserExistById(id);
+
+  // Check if user exists
+  if (!singleUser) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'User not found',
+    );
+  }
+
+  // Toggle user status
+  const status =
+    singleUser.status === 'blocked'
+      ? 'active'
+      : 'blocked';
+
+  // Update user status
+  const user = await User.findByIdAndUpdate(
+    id,
+    {
+      status,
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  );
+
+  // Check if update was successful
+  if (!user) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Failed to update user status',
+    );
+  }
+
+  notifyUserOfBlockStatus(user, adminId, status === 'blocked');
+
+  return {
+    status,
+    user,
+  };
+};
+
+// notifies a user (in-app + email) that their account was blocked or unblocked —
+// fire-and-forget so a notification/email hiccup never fails the status update itself
+const notifyUserOfBlockStatus = (user: TUser, adminId: string, isBlocked: boolean) => {
+  emitNotification({
+    userId: adminId,
+    receiverId: user._id,
+    userMsg: {
+      image: '',
+      text: isBlocked
+        ? 'Your PhotoOp account has been blocked. Please contact support for more information.'
+        : 'Your PhotoOp account has been unblocked. You can now use PhotoOp again.',
+      photos: [],
+    },
+    type: isBlocked ? NotificationType.ACCOUNT_BLOCKED : NotificationType.ACCOUNT_UNBLOCKED,
+  }).catch((error) => {
+    console.error('Failed to emit account block-status notification:', error);
+  });
+
+  if (!user.email) {
+    return;
+  }
+
+  const emailBody = renderEmailLayout({
+    preheader: isBlocked
+      ? 'Your PhotoOp account has been blocked.'
+      : 'Your PhotoOp account has been unblocked.',
+    headerTitle: isBlocked ? 'Account Blocked' : 'Account Unblocked',
+    bodyHtml: `
+      <p style="margin: 0 0 16px; line-height: 1.6;">Hello <strong>${user.fullName || ''}</strong>,</p>
+
+      <p style="margin: 0 0 16px; line-height: 1.6;">
+        ${isBlocked
+          ? 'Your PhotoOp account has been blocked by our team due to a violation of our Terms of Service or Community Guidelines. You will not be able to access your account until it is reinstated.'
+          : 'Good news! Your PhotoOp account has been unblocked and you can now log in and use PhotoOp again.'
+        }
+      </p>
+
+      ${renderSupportLine()}
+      ${renderPoliciesSection()}
+      ${renderSignature()}
+    `,
+  });
+
+  sendEmail(
+    user.email,
+    isBlocked ? 'Your PhotoOp Account Has Been Blocked' : 'Your PhotoOp Account Has Been Unblocked',
+    emailBody,
+  ).catch((error) => {
+    console.error('Failed to send account block-status email:', error);
+  });
+};
+
+// admin-initiated account deletion (dashboard "delete user" action) — unlike
+// deleteMyAccount, no password confirmation since the admin isn't the account owner
+const deleteUserByAdmin = async (id: string, adminId: string, reason?: string) => {
+  const user = await User.IsUserExistById(id);
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  if (user.isDeleted) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'This user is already deleted');
+  }
+
+  const deletedUser = await User.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+  if (!deletedUser) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Failed to delete user');
+  }
+
+  notifyUserOfAccountDeletion(deletedUser, adminId, reason);
+
+  return deletedUser;
+};
+
+// notifies a user (in-app + email) that an admin deleted their account —
+// fire-and-forget so a notification/email hiccup never fails the deletion itself
+const notifyUserOfAccountDeletion = (user: TUser, adminId: string, reason?: string) => {
+  emitNotification({
+    userId: adminId,
+    receiverId: user._id,
+    userMsg: {
+      image: '',
+      text: `Your PhotoOp account has been deleted by an administrator.${reason ? ` Reason: ${reason}` : ''}`,
+      photos: [],
+    },
+    type: NotificationType.ACCOUNT_DELETED,
+  }).catch((error) => {
+    console.error('Failed to emit account deletion notification:', error);
+  });
+
+  if (!user.email) {
+    return;
+  }
+
+  const emailBody = renderEmailLayout({
+    preheader: 'Your PhotoOp account has been deleted.',
+    headerTitle: 'Account Deleted',
+    bodyHtml: `
+      <p style="margin: 0 0 16px; line-height: 1.6;">Hello <strong>${user.fullName || ''}</strong>,</p>
+
+      <p style="margin: 0 0 16px; line-height: 1.6;">
+        Your PhotoOp account has been deleted by our team${reason ? ` for the following reason:` : '.'}
+      </p>
+
+      ${reason
+        ? `<div style="background-color: #f4f6fb; border-left: 4px solid ${PRIMARY_COLOR}; padding: 16px; margin: 16px 0;">
+             <p style="margin: 0;">${reason}</p>
+           </div>`
+        : ''
+      }
+
+      ${renderSupportLine()}
+      ${renderPoliciesSection()}
+      ${renderSignature()}
+    `,
+  });
+
+  sendEmail(user.email, 'Your PhotoOp Account Has Been Deleted', emailBody).catch((error) => {
+    console.error('Failed to send account deletion email:', error);
+  });
 };
 
 const getMyFavoriteUsers = async (userId: string) => {
@@ -1127,5 +1450,8 @@ export const userService = {
   getUsersOverview,
   getMyFavoriteUsers,
   addFavoriteUser,
-  removeFavoriteUser
+  removeFavoriteUser,
+  warnUser,
+  blockedUser,
+  deleteUserByAdmin,
 };

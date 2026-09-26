@@ -124,6 +124,7 @@ export interface TUserCreate {
   status?: UserStatus;
   adminApproval?: AdminApprovalStatus;
   approvalHistory?: IApprovalHistoryEntry[];
+  warnings?: {};
 
   isDeleted?: boolean;
   device: {

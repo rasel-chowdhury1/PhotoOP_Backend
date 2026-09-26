@@ -318,6 +318,46 @@ const removeFavoriteUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const warnUser = catchAsync(async (req: Request, res: Response) => {
+  const adminId = req.user.userId;
+  const { id }  = req.params;
+  const { reason } = req.body;
+
+  const result = await userService.warnUser(id, adminId, reason);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User warned successfully',
+    data: result,
+  });
+});
+
+
+const blockedUser = catchAsync(async (req: Request, res: Response) => {
+  const result = await userService.blockedUser(req.params.id, req.user.userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `User ${result.status ? 'blocked': 'unBlocked'} successfully`,
+    data: result.user,
+  });
+});
+
+
+const deleteUserByAdmin = catchAsync(async (req: Request, res: Response) => {
+  const adminId = req.user.userId;
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  const result = await userService.deleteUserByAdmin(id, adminId, reason);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User deleted successfully',
+    data: result,
+  });
+});
+
 const getMyFavoriteUsers = catchAsync(async (req: Request, res: Response) => {
   const result = await userService.getMyFavoriteUsers(req.user?.userId);
   sendResponse(res, {
@@ -352,5 +392,8 @@ export const userController = {
   verifyGuardian,
   resendGuardianVerification,
   addFavoriteUser,
-  removeFavoriteUser
+  removeFavoriteUser,
+  warnUser,
+  blockedUser,
+  deleteUserByAdmin,
 };

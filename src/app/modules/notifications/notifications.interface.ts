@@ -58,4 +58,10 @@ export enum NotificationType {
   WITHDRAW_FAILED = "withdraw_failed",
   WITHDRAW_REJECTED = "withdraw_rejected",
   WITHDRAW_CANCELLED = "withdraw_cancelled",
+
+  // Account moderation
+  ACCOUNT_WARNING = "account_warning",
+  ACCOUNT_BLOCKED = "account_blocked",
+  ACCOUNT_UNBLOCKED = "account_unblocked",
+  ACCOUNT_DELETED = "account_deleted",
 }
